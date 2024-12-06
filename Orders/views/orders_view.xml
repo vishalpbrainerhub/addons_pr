@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Inherit the existing product.template form view -->
+    <record id="view_product_template_form_inherit_rewards" model="ir.ui.view">
+        <field name="name">product.template.form.inherit.rewards</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="arch" type="xml">
+            <sheet>
+                <group name="sales">
+                    <!-- New fields for Discount and Rewards Score -->
+                    <group string="Rewards" class="oe_title">
+                        <field name="discount" colspan="2" class="oe_inline" style="font-size: 18px;"/>
+                        <field name="rewards_score" colspan="2" class="oe_inline" style="font-size: 18px;"/>
+                        <field name="code_" colspan="2" class="oe_inline" style="font-size: 18px;"/>
+                    </group>
+                </group>
+            </sheet>
+        </field>
+    </record>
+</odoo>

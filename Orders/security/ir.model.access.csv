@@ -1,0 +1,6 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_product_template_user,product.template.user,product.model_product_template,base.group_user,1,0,0,0
+access_product_template_manager,product.template.manager,product.model_product_template,base.group_user,1,1,1,1
+access_mobile_ecommerce_cart_user,mobile_ecommerce.cart.user,model_mobile_ecommerce_cart,base.group_user,1,0,0,0
+access_mobile_ecommerce_cart_manager,mobile_ecommerce.cart.manager,model_mobile_ecommerce_cart,base.group_user,1,1,1,1
+

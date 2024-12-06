@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_rewards_points_user,rewards.points.user,model_rewards_points,base.group_user,1,1,1,0
+access_rewards_points_manager,rewards.points.manager,model_rewards_points,base.group_system,1,1,1,1
+access_rewards_catalog_user,rewards.catalog.user,model_rewards_catalog,base.group_user,1,0,0,0
+access_rewards_catalog_manager,rewards.catalog.manager,model_rewards_catalog,base.group_system,1,1,1,1
+access_rewards_totalpoints_user,rewards.totalpoints.user,model_rewards_totalpoints,base.group_user,1,0,0,0
+access_rewards_totalpoints_manager,rewards.totalpoints.manager,model_rewards_totalpoints,base.group_system,1,1,1,1

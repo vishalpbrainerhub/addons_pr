@@ -1,0 +1,213 @@
+<odoo>
+    <menuitem id="menu_social_media" name="Gestione della Comunità" sequence="10"/>
+
+    <!-- Post Model View -->
+    <record id="view_post_tree" model="ir.ui.view">
+        <field name="name">social_media.post.tree</field>
+        <field name="model">social_media.post</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="image" invisible="1"/>
+                <field name="description" string="Descrizione"/>
+                <field name="timestamp" string="Data"/>
+                <field name="report_count" string="Segnalazioni"/>
+                <field name="likes_count" string="Mi piace"/>
+                <field name="comments_count" string="Commenti"/>
+                <field name="user_id" string="Utente"/>
+                <field name="image_view" widget="html" string="Immagine"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_post_form" model="ir.ui.view">
+        <field name="name">social_media.post.form</field>
+        <field name="model">social_media.post</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="user_id" string="Utente"/>
+                        <field name="image_view" widget="html" string="Immagine"/>
+                        <field name="description" string="Descrizione"/>
+                        <field name="timestamp" string="Data"/>
+                    </group>
+                    <notebook>
+                        <page string="Mi piace">
+                            <field name="likes" string="Mi piace">
+                                <tree>
+                                    <field name="user_id" string="Utente"/>
+                                    <field name="timestamp" string="Data"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Commenti">
+                            <field name="comments" string="Commenti">
+                                <tree decoration-info="comment_reports==0" decoration-muted="comment_reports>0" decoration-bf="like_comments_count>0">
+                                    <field name="content" string="Commento" />
+                                    <field name="user_id" string="Utente" />
+                                    <field name="timestamp" string="Data" />
+                                    <field name="like_comments_count" string="Mi piace" widget="integer"/>
+                                    <field name="report_comments_count" string="Segnalazioni" widget="integer"/>
+                                    <field name="comment_likes" widget="many2many_tags" string="Apprezzato da"/>
+                                    <field name="comment_reports" widget="many2many_tags" string="Segnalato da"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Segnalazioni del post">
+                            <field name="reports" string="Segnalazioni">
+                                <tree>
+                                    <field name="user_id" string="Utente"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Analisi">
+                            <group>
+                                <field name="likes_count" string="Mi piace"/>
+                                <field name="comments_count" string="Commenti"/>
+                                <field name="report_count" string="Segnalazioni"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_posts" model="ir.actions.act_window">
+        <field name="name">Post</field>
+        <field name="res_model">social_media.post</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="menu_social_media_posts" name="Post" parent="menu_social_media" action="action_posts" sequence="10"/>
+
+    <!-- user address -->
+    <menuitem id="menu_social_media_addresses" name="Indirizzi" parent="menu_social_media" sequence="15"/>
+
+    <!-- Action to open Address view -->
+    <record id="action_addresses" model="ir.actions.act_window">
+        <field name="name">Indirizzi</field>
+        <field name="res_model">social_media.custom_address</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Link the action to the submenu -->
+    <menuitem id="submenu_social_media_addresses" name="Gestisci Indirizzi" parent="menu_social_media_addresses" action="action_addresses" sequence="10"/>
+
+    <record id="view_address_tree" model="ir.ui.view">
+        <field name="name">social_media.address.tree</field>
+        <field name="model">social_media.custom_address</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="user_id" string="Utente"/>
+                <field name="address" string="Indirizzo"/>
+                <field name="city" string="Città"/>
+                <field name="postal_code" string="CAP"/>
+                <field name="country_id" string="Paese"/>
+                <field name="default" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View for Addresses -->
+    <record id="view_address_form" model="ir.ui.view">
+        <field name="name">social_media.address.form</field>
+        <field name="model">social_media.custom_address</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="user_id" string="Utente"/>
+                        <field name="address" string="Indirizzo"/>
+                        <field name="continued_address" string="Indirizzo Continuato"/>
+                        <field name="city" string="Città"/>
+                        <field name="postal_code" string="CAP"/>
+                        <field name="village" string="Villaggio"/>
+                        <field name="state_id" string="Stato"/>
+                        <field name="country_id" string="Paese"/>
+                        <field name="default" string="Predefinito"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Actions for viewing all addresses and default address separately -->
+    <record id="action_default_addresses" model="ir.actions.act_window">
+        <field name="name">Indirizzo Predefinito</field>
+        <field name="res_model">social_media.custom_address</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('default', '=', True)]</field>
+    </record>
+
+    <menuitem id="submenu_social_media_default_address" name="Indirizzo Predefinito" parent="menu_social_media_addresses" action="action_default_addresses" sequence="5"/>
+
+    <!-- user's info -->
+    <record id="action_user_info" model="ir.actions.act_window">
+        <field name="name">Informazioni Utente</field>
+        <field name="res_model">res.users</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="menu_user_info" name="Informazioni Utente" parent="menu_social_media" action="action_user_info" sequence="20"/>
+
+    <record id="view_res_users_form_inherit_blocked" model="ir.ui.view">
+        <field name="name">res.users.form.inherit.blocked</field>
+        <field name="model">res.users</field>
+        <field name="inherit_id" ref="base.view_users_form"/>
+        <field name="arch" type="xml">
+            <sheet>
+                <group string="Utenti Bloccati" class="oe_title">
+                    <!-- Add field for Blocked Users -->
+                    <field name="blocked_users" widget="many2many_tags" options="{'no_create': True}" colspan="4" class="oe_inline"/>
+                </group>
+            </sheet>
+        </field>
+    </record>
+
+
+
+    <!-- Banner Model View -->
+
+    <record id="view_banner_tree" model="ir.ui.view">
+        <field name="name">social_media.banner.tree</field>
+        <field name="model">social_media.banner</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="image_1" widget="image"/>
+                <field name="image_2" widget="image"/>
+                <field name="image_3" widget="image"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_banner_form" model="ir.ui.view">
+        <field name="name">social_media.banner.form</field>
+        <field name="model">social_media.banner</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="image_1" widget="image"/>
+                        <field name="image_2" widget="image"/>
+                        <field name="image_3" widget="image"/>
+                        <button name="image_1_url" string="Carica Immagini" type="object" class="oe_highlight"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    
+
+    <record id="action_banners" model="ir.actions.act_window">
+        <field name="name">Banners</field>
+        <field name="res_model">social_media.banner</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Banner Menu Item -->
+    <menuitem id="menu_social_media_banners" name="Banners" parent="menu_social_media" action="action_banners" sequence="30"/>
+
+
+
+</odoo>

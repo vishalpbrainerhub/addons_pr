@@ -1,0 +1,20 @@
+# Byte-compiled / intermediate files
+*.py[cod]
+__pycache__/
+
+# Odoo-specific files
+*.log
+*.db
+*.bak
+*.swp
+
+# Ignore environment files
+.env
+.venv
+venv/
+
+# Ignore any compiled translations
+*.mo
+
+# Ignore backup files
+*~

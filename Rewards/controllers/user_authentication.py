@@ -16,7 +16,7 @@ def user_auth(self):
                 "message": "Token is required."
             }
         token = token.split(' ')[1]
-        secret_key =  os.getenv("JWT_SECRET_KEY")
+        secret_key =  "testing_enviroment"
         try:
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])
             user = request.env['res.users'].sudo().search([('id', '=', payload['user_id'])])

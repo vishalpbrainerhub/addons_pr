@@ -41,7 +41,7 @@ class SocialMediaAuth(http.Controller):
 
         # Extract the actual token part following the 'Bearer' keyword
         token = token.split(' ')[1]
-        secret_key = os.getenv("JWT_SECRET_KEY")
+        secret_key = "testing_enviroment"
 
         try:
             # Decode the JWT token to extract user information

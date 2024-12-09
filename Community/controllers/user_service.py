@@ -56,7 +56,7 @@ class Users(http.Controller):
                 # Fix for JWT secret key
                 secret_key = os.getenv("JWT_SECRET_KEY")
                 if not secret_key:
-                    secret_key = "your-default-secret-key"  # Replace with your actual default secret key
+                    secret_key = "testing_enviroment"  # Replace with your actual default secret key
 
                 token = jwt.encode(payload, str(secret_key), algorithm='HS256')
 

@@ -15,6 +15,7 @@ def user_auth(self):
                 "message": "Token is required."
             }
         token = token.split(' ')[1]
+        print(token,"------------------")
         secret_key =  "testing_enviroment"
         try:
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])

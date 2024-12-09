@@ -28,6 +28,7 @@ class MobileEcommerceApiController(http.Controller):
             # Authenticate user and handle error in authentication
             user_info = user_auth(self)
             if user_info['status'] == 'error':
+                print(user_info,"------------------")
                 return Response(
                     json.dumps({
                         'status': 'error',

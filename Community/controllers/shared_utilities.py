@@ -61,15 +61,13 @@ def Upload_image(image_file):
     Returns:
         str: The path to the saved image.
     """
-    save_directory = 'images/community'
+    save_directory = '/mnt/extra-addons/images/community'
     os.makedirs(save_directory, exist_ok=True)
-
     file_path = os.path.join(save_directory, f'post_image_{random.randint(100000, 999999)}.png')
-
+    
     with open(file_path, 'wb') as file:
         file.write(image_file.read())
-
-    return file_path
+    return file_path.replace('/mnt/extra-addons/', '')
 
 
 

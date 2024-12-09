@@ -261,20 +261,16 @@ class Users(http.Controller):
             }
     
 
-    # get all the banner form the Banners folder and return the image path of all the banners
     @http.route('/api/banners', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def banners(self):
-        """
-        Description: Fetches all banner images from the 'images/banners' directory and returns their paths.
-        Parameters: None
-        """
         banners = []
         try:
-            # read the images/banners directory
-            for root, dirs, files in os.walk("images/banners"):
+            banner_dir = '/mnt/extra-addons/images/banners'
+            for root, dirs, files in os.walk(banner_dir):
                 for file in files:
-                    if file.endswith(".jpg") or file.endswith(".png"):
-                        banners.append(os.path.join(root, file))
+                    if file.endswith((".jpg", ".png")):
+                        path = os.path.join(root, file)
+                        banners.append(path.replace('/mnt/extra-addons/', ''))
         
             data = {
                 "status": "success",
@@ -284,26 +280,21 @@ class Users(http.Controller):
         except Exception as e:
             _logger.error('Error retrieving banners: %s', str(e))
             data = {
-                "status": "error",
+                "status": "error", 
                 "message": "Errore nel recupero dei banner",
-                "info": "Error retrieving banner images"
+                "info": str(e)
             }
-
         return request.make_response(json.dumps(data), [('Content-Type', 'application/json')])
-    
     
     @http.route('/images/banners/<path:image>', type='http', auth='public', csrf=False)
     def get_image(self, image):
-        image_path = os.path.join('images/banners', image)
+        image_path = os.path.join('/mnt/extra-addons/images/banners', image)
         if os.path.exists(image_path):
             with open(image_path, 'rb') as f:
                 image_data = f.read()
             return Response(image_data, content_type='image/png')
-        else:
-            return Response(json.dumps({
-                'error': {'message': 'Image not found'},
-                'status': 'error',
-                'status_code': '404'  # Not Found
-            }), content_type='application/json', status=404)
-        
-
+        return Response(json.dumps({
+            'error': {'message': 'Image not found'},
+            'status': 'error',
+            'status_code': '404'
+        }), content_type='application/json', status=404)

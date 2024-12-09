@@ -403,7 +403,7 @@ class UsersAuthApi(http.Controller):
 
     @http.route('/images/profilepics/<path:image>', type='http', auth='public', csrf=False,cors='*')
     def get_image(self, image):
-        image_path = os.path.join('images/profilepics', image)
+        image_path = os.path.join('/mnt/extra-addons/images/profilepics', image)
         if os.path.exists(image_path):
             with open(image_path, 'rb') as f:
                 image_data = f.read()
@@ -411,8 +411,8 @@ class UsersAuthApi(http.Controller):
         else:
             return Response(json.dumps({
                 'error': {'message': 'Image not found'},
-                'status': 'error',
-                'status_code': '404'  # Not Found
+                'status': 'error', 
+                'status_code': '404'
             }), content_type='application/json', status=404)
         
 

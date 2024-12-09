@@ -193,7 +193,7 @@ class SocialMedia(http.Controller):
                 }), content_type='application/json', status=403)
             
             # remove the image from the directory
-            image_path = post.image
+            image_path = os.path.join('/mnt/extra-addons', post.image)
             if os.path.exists(image_path):
                 os.remove(image_path)
 
@@ -299,8 +299,7 @@ class SocialMedia(http.Controller):
             # Convert timestamp to ISO 8601 format if present
             for like in likes_data:
                 user_info = request.env['res.users'].sudo().search([('id', '=', like['user_id'][0])])
-                image_dir = f'images/profilepics/{user_info.id}'
-                profile_image = f'{image_dir}/{os.listdir(image_dir)[0]}' if os.path.exists(image_dir) and os.listdir(image_dir) else None
+                profile_image = get_user_profile_image_path(user_info.id)
 
                 like.update({
                     'profile_image': profile_image,

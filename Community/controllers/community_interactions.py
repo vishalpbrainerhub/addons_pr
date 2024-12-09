@@ -145,7 +145,7 @@ class SocialMedia(http.Controller):
         Retrieve an image from the community images directory.
         Parameters: image - The path of the image to retrieve.
         """
-        image_path = os.path.join('images/community', image)
+        image_path = os.path.join('/mnt/extra-addons/images/community', image)
         if os.path.exists(image_path):
             with open(image_path, 'rb') as f:
                 image_data = f.read()

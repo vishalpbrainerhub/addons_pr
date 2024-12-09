@@ -32,15 +32,15 @@ class SocialMediaAuth(http.Controller):
         Returns:
             dict: A dictionary containing the status of the authentication, potentially with the user ID if successful or an error message if not.
         """
-        token = request.httprequest.headers.get('Authorization', False)
-        if not token:
+        auth_header = request.httprequest.headers.get('Authorization', False)
+        if not auth_header:
             return {
                 "status": "error",
                 "message": "Token is required."
             }
 
         # Extract the actual token part following the 'Bearer' keyword
-        token = token.split(' ')[1]
+        token = auth_header.split(' ')[1]
         secret_key = "testing_enviroment"
 
         try:

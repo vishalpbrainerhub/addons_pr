@@ -38,7 +38,7 @@ def save_user_image(user_id, image_data):
    with open(image_path, 'wb') as file:
        file.write(base64.b64decode(image_data))
 
-   return image_path.replace('/mnt/extra-addons/', '')
+   return image_path.replace('/mnt/extra-addons', '')
 
 
 def Upload_image(image_file):

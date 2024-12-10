@@ -39,3 +39,22 @@ def save_user_image(user_id, image_data):
        file.write(base64.b64decode(image_data))
 
    return image_path.replace('/mnt/extra-addons/', '')
+
+
+def Upload_image(image_file):
+    """
+    Save an uploaded image to a designated directory on the server and return its path.
+    Parameters:
+        image_file (File): The image file to be saved.
+    Returns:
+        str: The path to the saved image.
+    """
+    save_directory = '/mnt/extra-addons/images/community'
+    os.makedirs(save_directory, exist_ok=True)
+
+    file_path = os.path.join(save_directory, f'post_image_{random.randint(100000, 999999)}.png')
+
+    with open(file_path, 'wb') as file:
+        file.write(image_file.read())
+
+    return file_path.replace('/mnt/extra-addons/', '')

@@ -9,7 +9,6 @@ load_dotenv()
 
 class SocialMediaAuth(http.Controller):
     
-
     def get_cors_headers():
         """
         Define and return the necessary CORS headers for the response.
@@ -24,13 +23,13 @@ class SocialMediaAuth(http.Controller):
             ('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept')
         ]
 
-    
     def user_auth(self):
         """
-        Authenticate the user by verifying the JWT token from the request headers.
+        Authenticate the customer by verifying the JWT token from the request headers.
 
         Returns:
-            dict: A dictionary containing the status of the authentication, potentially with the user ID if successful or an error message if not.
+            dict: A dictionary containing the status of the authentication, 
+                 potentially with the customer ID if successful or an error message if not.
         """
         auth_header = request.httprequest.headers.get('Authorization', False)
         if not auth_header:
@@ -40,23 +39,37 @@ class SocialMediaAuth(http.Controller):
             }
 
         # Extract the actual token part following the 'Bearer' keyword
-        token = auth_header.split(' ')[1]
-        secret_key = "testing_enviroment"
+        try:
+            token = auth_header.split(' ')[1]
+        except IndexError:
+            return {
+                "status": "error",
+                "message": "Invalid authorization header format."
+            }
+
+        secret_key = os.getenv("JWT_SECRET_KEY")
 
         try:
-            # Decode the JWT token to extract user information
+            # Decode the JWT token to extract customer information
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])
-            user = request.env['res.users'].sudo().search([('id', '=', payload['user_id'])])
-            if user:
+            
+            # Search for customer instead of user
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', payload['user_id']),
+                ('customer_rank', '>', 0)  # Ensure it's a customer
+            ])
+            
+            if customer:
                 return {
                     "status": "success",
-                    "user_id": user.id,
+                    "user_id": customer.id,  # Keeping user_id in response for compatibility
                 }
             else:
                 return {
                     "status": "error",
-                    "message": "Invalid token."
+                    "message": "Invalid token or customer not found."
                 }
+
         except jwt.ExpiredSignatureError:
             return {
                 "status": "error",
@@ -72,4 +85,3 @@ class SocialMediaAuth(http.Controller):
                 "status": "error",
                 "message": str(e)
             }
-        

@@ -16,7 +16,7 @@ class Banner(models.Model):
    image_3 = fields.Binary("Image_3")
 
    def image_1_url(self):
-       directory_path = '/mnt/extra-addons/images/banners'
+       directory_path = 'images/banners'
        images = [self.image_1, self.image_2, self.image_3]
 
        os.makedirs(directory_path, exist_ok=True)

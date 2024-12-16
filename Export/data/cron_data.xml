@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="ir_cron_import_data" model="ir.cron">
+            <field name="name">Import Data Files</field>
+            <field name="model_id" ref="model_data_import_scheduler"/>
+            <field name="state">code</field>
+            <field name="code">model.run_imports()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">minutes</field>
+            <field name="numbercall">-1</field>
+            <field name="active">True</field>
+        </record>
+    </data>
+</odoo>

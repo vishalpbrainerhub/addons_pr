@@ -1,10 +1,13 @@
 from odoo import models, fields
 
-class UserAddressModel(models.Model):
+class CustomerAddressModel(models.Model):
     _name = 'social_media.custom_address'
-    _description = 'User Address Model'
+    _description = 'Customer Address Model'
     
-    user_id = fields.Many2one('res.users', string='User', required=True, ondelete='cascade')
+    partner_id = fields.Many2one('res.partner', string='Customer', 
+                                required=True, 
+                                ondelete='cascade',
+                                domain=[('customer_rank', '>', 0)])
     address = fields.Text("Address", required=True)
     continued_address = fields.Text("Continued Address")
     city = fields.Char("City", required=True)
@@ -12,4 +15,4 @@ class UserAddressModel(models.Model):
     village = fields.Char("Village")
     default = fields.Boolean("Default", default=False)
     country_id = fields.Many2one('res.country', string="Country")
-    state_id = fields.Many2one('res.country.state', string="State", domain="[('country_id', '=', country_id)]")
+    state_id = fields.Many2one('res.country.state', string="State", domain="[('country_id', '=', country_id)]", required=False)

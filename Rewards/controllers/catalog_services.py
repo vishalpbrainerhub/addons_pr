@@ -1,68 +1,49 @@
 from odoo import http
 from odoo.http import request, Response
 import json
-from .user_authentication import user_auth
-
+from .user_authentication import SocialMediaAuth
 
 
 class CatalogApis(http.Controller):
 
-    @http.route('/api/catalog', type='http', auth='user', methods=['GET'], csrf=False, cors='*')
+    @http.route('/api/catalog', type='http', auth='public', methods=['GET'], csrf=False, cors='*')
     def get_catalog(self):
-        """
-        Retrieve catalog data accessible to authenticated users only. This API handles CORS.
-        parameters: none
-        """
-        # Check if user is authenticated
-        user = user_auth(self)
-        if user['status'] == 'error':
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'message': 'Autenticazione fallita',  
-                    'info': user['message']  
-                }),
-                content_type='application/json',
-                status=401,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-        
         try:
-            # Retrieve catalog data from the database
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Autenticazione fallita',
+                    'info': user['message']
+                }), content_type='application/json', status=401, headers={'Access-Control-Allow-Origin': '*'})
+
+            partner_id = user['user_id']
+
             catalogs = request.env['rewards.catalog'].sudo().search([])
             catalog_data = []
             for catalog in catalogs:
-                image_url = '/web/image/rewards.catalog/' + str(catalog.id) + '/image' if catalog.image else None
+                # /web/image?model=rewards.catalog&id=1&field=image
+                
+                # image_url = '/web/image/rewards.catalog/' + str(catalog.id) + '/image' if catalog.image else None
+                image_url = '/web/image?model=rewards.catalog&id=' + str(catalog.id) + '&field=image' if catalog.image else None   
                 catalog_data.append({
                     'id': catalog.id,
-                    'title': catalog.title,
+                    'title': catalog.title, 
                     'description': catalog.description,
                     'points': catalog.points,
                     'image': image_url
                 })
 
-            # Successful response with catalog data
-            response_dict = {
+            return Response(json.dumps({
                 'status': 'success',
-                'message': 'Catalogo recuperato con successo',  
-                'info': 'Catalog retrieved successfully',  
+                'message': 'Catalogo recuperato con successo',
+                'info': 'Catalog retrieved successfully',
                 'data': catalog_data
-            }
-            return Response(
-                json.dumps(response_dict),
-                content_type='application/json',
-                status=200,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
+            }), content_type='application/json', status=200, headers={'Access-Control-Allow-Origin': '*'})
+
         except Exception as e:
-            # Handle any unexpected errors
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'message': 'Errore del server interno',  
-                    'info': str(e)  
-                }),
-                content_type='application/json',
-                status=500,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
+            return Response(json.dumps({
+                'status': 'error',
+                'message': 'Errore del server interno',
+                'info': str(e)
+            }), content_type='application/json', status=500, headers={'Access-Control-Allow-Origin': '*'})

@@ -18,3 +18,13 @@ venv/
 
 # Ignore backup files
 *~
+
+# ftpuser
+# ftpprimapaint
+
+/In
+
+**In
+
+zz.txt
+.gitignore

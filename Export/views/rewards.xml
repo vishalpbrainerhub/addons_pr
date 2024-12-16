@@ -1,0 +1,130 @@
+<odoo>
+    <!-- Rewards Points Tree View -->
+    <record id="view_rewards_points_tree" model="ir.ui.view">
+        <field name="name">rewards.points.tree</field>
+        <field name="model">rewards.points</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="user_id" string="Utente"/>
+                <field name="order_id" string="ID Ordine"/>
+                <field name="points" string="Punti"/>
+                <field name="status" string="Stato"/>
+                <field name="date" string="Data"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Rewards Points Form View -->
+    <record id="view_rewards_points_form" model="ir.ui.view">
+        <field name="name">rewards.points.form</field>
+        <field name="model">rewards.points</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="user_id" string="Utente"/>
+                        <field name="order_id" string="ID Ordine"/>
+                        <field name="points" string="Punti"/>
+                        <field name="status" string="Stato"/>
+                        <field name="date" string="Data"/>
+                        <field name="catalog_id" string="ID Catalogo"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Rewards Points Action -->
+    <record id="action_rewards_points" model="ir.actions.act_window">
+        <field name="name">Punti Premio</field>
+        <field name="res_model">rewards.points</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Rewards Points Menu -->
+    <menuitem id="menu_rewards_management" name="Gestione Premi" sequence="10"/>
+    <menuitem id="menu_rewards_points" name="Punti Premio" parent="menu_rewards_management" action="action_rewards_points" sequence="10"/>
+
+    <!-- Rewards Catalog Tree View -->
+    <record id="view_rewards_catalog_tree" model="ir.ui.view">
+        <field name="name">rewards.catalog.tree</field>
+        <field name="model">rewards.catalog</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="title" string="Titolo"/>
+                <field name="description" string="Descrizione"/>
+                <field name="points" string="Punti"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Rewards Catalog Form View -->  
+    <record id="view_rewards_catalog_form" model="ir.ui.view">
+        <field name="name">rewards.catalog.form</field>
+        <field name="model">rewards.catalog</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="title" string="Titolo"/>
+                            <field name="description" string="Descrizione"/>
+                            <field name="points" string="Punti"/>  
+                        </group>
+                        <group>
+                            <field name="image" widget="image" class="oe_avatar" options="{'size': [150, 150]}" string="Immagine"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Rewards Catalog Action -->
+    <record id="action_rewards_catalog" model="ir.actions.act_window">
+        <field name="name">Catalogo Premi</field>
+        <field name="res_model">rewards.catalog</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Rewards Catalog Menu -->
+    <menuitem id="menu_rewards_catalog" name="Catalogo Premi" parent="menu_rewards_management" action="action_rewards_catalog" sequence="20"/>
+
+    <!-- Total Points Tree View -->
+    <record id="view_total_points_tree" model="ir.ui.view">
+        <field name="name">rewards.totalpoints.tree</field>
+        <field name="model">rewards.totalpoints</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="user_id" string="Utente"/>
+                <field name="total_points" string="Punti Totali"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Total Points Form View -->
+    <record id="view_total_points_form" model="ir.ui.view">
+        <field name="name">rewards.totalpoints.form</field>
+        <field name="model">rewards.totalpoints</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="user_id" string="Utente"/>
+                        <field name="total_points" string="Punti Totali"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Total Points Action -->
+    <record id="action_total_points" model="ir.actions.act_window">
+        <field name="name">Punti Totali</field>
+        <field name="res_model">rewards.totalpoints</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Total Points Menu -->
+    <menuitem id="menu_total_points" name="Punti Totali" parent="menu_rewards_management" action="action_total_points" sequence="30"/>
+</odoo>

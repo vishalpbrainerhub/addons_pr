@@ -2,22 +2,22 @@ from odoo import models, fields
 from odoo.exceptions import AccessDenied
 import logging
 
+class ResPartner(models.Model):
+    _inherit = 'res.partner'
 
-class ResUsers(models.Model):
-    _inherit = 'res.users'
-
-    blocked_users = fields.Many2many(
-        'res.users', 'res_users_blocked_rel', 'user_id', 'blocked_user_id',
-        string='Blocked Users'
+    blocked_customers = fields.Many2many(
+        'res.partner', 
+        'res_partner_blocked_rel', 
+        'partner_id', 
+        'blocked_partner_id',
+        string='Blocked Customers'
     )
-    x_last_name = fields.Char("last_name",)
 
-    
-class UserAddressModel(models.Model):
+class CustomerAddressModel(models.Model):
     _name = 'social_media.address'
-    _description = 'User Address'
+    _description = 'Customer Address'
     
-    user_id = fields.Many2one('res.users', string='User', required=True)
+    partner_id = fields.Many2one('res.partner', string='Customer', required=True)
     address = fields.Text("Address")
     continued_address = fields.Text("Continued Address")
     city = fields.Char("City")

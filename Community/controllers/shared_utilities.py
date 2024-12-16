@@ -9,37 +9,37 @@ import base64
 load_dotenv()
 
 def generate_password(email):
-   characters = ["!", "@", "#", "$", "%", "&", "*"]
-   test = email.split('@')[0].capitalize()
-   return test + characters[random.randint(0, 6)] + str(random.randint(111, 458962))
+    characters = ["!", "@", "#", "$", "%", "&", "*"]
+    test = email.split('@')[0].capitalize()
+    return test + characters[random.randint(0, 6)] + str(random.randint(111, 458962))
 
 def forgot_password(email, password, to_email):
-   return True 
+    return True 
 
 def get_user_profile_image_path(user_id):
-   image_dir = f'/mnt/extra-addons/images/profilepics/{user_id}'
-   if os.path.exists(image_dir) and os.listdir(image_dir):
-       return f'{image_dir}/{os.listdir(image_dir)[0]}'.replace('/mnt/extra-addons/', '')
-   return 'None'
+    image_dir = f'images/profilepics/{user_id}'
+    if os.path.exists(image_dir) and os.listdir(image_dir):
+        return f'{image_dir}/{os.listdir(image_dir)[0]}'
+    return 'None'
 
 def save_user_image(user_id, image_data):
-   if not image_data:
-       return 'None'
+    if not image_data:
+        return 'None'
 
-   save_directory = f'/mnt/extra-addons/images/profilepics/{user_id}'
-   os.makedirs(save_directory, exist_ok=True)
+    save_directory = f'images/profilepics/{user_id}'
+    os.makedirs(save_directory, exist_ok=True)
 
-   for file in os.listdir(save_directory):
-       os.remove(os.path.join(save_directory, file))
+    # Clean up existing files
+    for file in os.listdir(save_directory):
+        os.remove(os.path.join(save_directory, file))
 
-   image_filename = f'profile_{random.randint(1, 5000)}_{user_id}.png'
-   image_path = os.path.join(save_directory, image_filename)
+    image_filename = f'profile_{random.randint(1, 5000)}_{user_id}.png'
+    image_path = os.path.join(save_directory, image_filename)
 
-   with open(image_path, 'wb') as file:
-       file.write(base64.b64decode(image_data))
+    with open(image_path, 'wb') as file:
+        file.write(base64.b64decode(image_data))
 
-   return image_path.replace('/mnt/extra-addons', '')
-
+    return image_path
 
 def Upload_image(image_file):
     """
@@ -49,7 +49,7 @@ def Upload_image(image_file):
     Returns:
         str: The path to the saved image.
     """
-    save_directory = '/mnt/extra-addons/images/community'
+    save_directory = 'images/community'
     os.makedirs(save_directory, exist_ok=True)
 
     file_path = os.path.join(save_directory, f'post_image_{random.randint(100000, 999999)}.png')
@@ -57,4 +57,4 @@ def Upload_image(image_file):
     with open(file_path, 'wb') as file:
         file.write(image_file.read())
 
-    return file_path.replace('/mnt/extra-addons/', '')
+    return file_path

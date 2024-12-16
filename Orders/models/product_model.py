@@ -6,4 +6,5 @@ class ProductTemplate(models.Model):
     discount = fields.Float(string='Discount', default=0.0)
     rewards_score = fields.Integer(string='Score', default=0)
     code_ = fields.Char(string='Code', required=True)
+    is_published = fields.Boolean(string='Is Published', default=True, help='Determines if product is visible in store')
 

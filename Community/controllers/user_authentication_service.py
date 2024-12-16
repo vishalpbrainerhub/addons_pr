@@ -63,13 +63,10 @@ class UsersAuthApi(http.Controller):
 
 
         
-
-
-    # update the user's address
     @http.route('/user/add_address', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def add_address(self):
         """
-        Description: Adds or updates the user's address in the system.
+        Description: Adds or updates the customer's address in the system.
         Parameters: address, continued_address, city, postal_code, village, country_id, state_id
         """
         if request.httprequest.method == 'OPTIONS':
@@ -89,20 +86,20 @@ class UsersAuthApi(http.Controller):
                 'status': 'error',
                 'message': user_auth['message'],
                 'info': "Authentication failed",
-                'status_code': 401  # Unauthorized
+                'status_code': 401
             }
 
         try:
-            user_id = user_auth['user_id']
-            user_address = request.env['social_media.custom_address'].search([('user_id', '=', user_id)])
-            _logger.info(f"User Address: {user_address}")
+            partner_id = user_auth['user_id']
+            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', partner_id)])
+            _logger.info(f"Customer Address: {customer_address}")
             
             address_action = 'updated'
-            # Check if the user address exists and update or create new
-            if not user_address:
+            # Check if the customer address exists and update or create new
+            if not customer_address:
                 address_action = 'created'
-                user_address = request.env['social_media.custom_address'].create({
-                    'user_id': user_id,
+                customer_address = request.env['social_media.custom_address'].create({
+                    'partner_id': partner_id,
                     'address': address_details,
                     'continued_address': continued_address,
                     'city': city,
@@ -113,11 +110,11 @@ class UsersAuthApi(http.Controller):
                     'default': True
                 })
 
-            user = request.env['res.users'].sudo().browse(user_id)
-            if not user:
-                return {'status': 'error', 'message': 'Utente non trovato', 'info': "User not found"}
+            partner = request.env['res.partner'].sudo().browse(partner_id)
+            if not partner:
+                return {'status': 'error', 'message': 'Cliente non trovato', 'info': "Customer not found"}
 
-            user.sudo().write({
+            partner.sudo().write({
                 'street': address_details,
                 'street2': continued_address + ' ' + village,
                 'city': city,
@@ -131,98 +128,95 @@ class UsersAuthApi(http.Controller):
         except Exception as e:
             _logger.error(f"Error in add/update address: {str(e)}")
             return {'status': 'error', 'message': "Errore durante l'aggiornamento dell'indirizzo", 'info': str(e), 'status_code': 500}
-        
 
 
     @http.route('/user/get_address', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_address(self):
         """
-        Description: Retrieves the address information for an authenticated user.
+        Description: Retrieves the address information for an authenticated customer.
         Parameters: None
         """
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
-        user_auth = SocialMediaAuth.user_auth(self)  # Assuming this is a custom authentication method
-        if user_auth['status'] == 'error':
+        customer_auth = SocialMediaAuth.user_auth(self)
+        if customer_auth['status'] == 'error':
             return Response(json.dumps({
                 'status': 'error',
-                'message': user_auth['message'],  # Assuming the message is already in Italian
+                'message': customer_auth['message'],
                 'info': "Authentication failed",
-                'status_code': 401  # Unauthorized
+                'status_code': 401
             }), content_type='application/json', status=401)
 
         try:
-            user_id = user_auth['user_id']
-            user_address = request.env['social_media.custom_address'].search([('user_id', '=', user_id)])
-            if not user_address:
+            partner_id = customer_auth['user_id']
+            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', partner_id)])
+            if not customer_address:
                 return Response(json.dumps({
                     'status': 'error',
-                    'message': 'Nessun indirizzo trovato per questo utente',
-                    'info': 'No address found for this user'
+                    'message': 'Nessun indirizzo trovato per questo cliente',
+                    'info': 'No address found for this customer'
                 }), content_type='application/json', status=404)
 
-            user_address_data = user_address.read(['address', 'continued_address', 'city', 'postal_code', 'village', 'default', 'state_id', 'country_id'])
+            customer_address_data = customer_address.read(['address', 'continued_address', 'city', 'postal_code', 'village', 'default', 'state_id', 'country_id'])
 
             return Response(json.dumps({"result":{
                 'status': 'success',
-                'address': user_address_data
+                'address': customer_address_data
             }}), content_type='application/json')
 
         except Exception as e:
-            _logger.error('Error retrieving user address: %s', str(e))
+            _logger.error('Error retrieving customer address: %s', str(e))
             return Response(json.dumps({
                 'status': 'error',
                 'message': "Errore durante il recupero dell'indirizzo",
                 'info': str(e),
-                'status_code': 500  # Internal Server Error
+                'status_code': 500
             }), content_type='application/json', status=500)
-        
 
-        
 
     @http.route('/user/change_default_address', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def change_default_address(self):
         """
-        Description: Changes the default address for the user and updates the user profile.
+        Description: Changes the default address for the customer and updates the customer profile.
         Parameters: address_id
         """
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
-        user_auth = SocialMediaAuth.user_auth(self)  # Assuming this is a custom authentication method
-        if user_auth['status'] == 'error':
+        customer_auth = SocialMediaAuth.user_auth(self)
+        if customer_auth['status'] == 'error':
             return {
                 'status': 'error',
-                'message': user_auth['message'],
+                'message': customer_auth['message'],
                 'info': "Non authorized",
-                'status_code': 401  # Unauthorized
+                'status_code': 401
             }
 
-        user_id = user_auth['user_id']
+        partner_id = customer_auth['user_id']
         address_id = request.jsonrequest.get('address_id', False)
         if not address_id:
             return {'status': 'error', 'message': 'L\'ID dell\'indirizzo è richiesto', 'info': 'Address ID is required'}
 
         try:
-            user_address = request.env['social_media.custom_address'].search([('user_id', '=', user_id)])
-            if not user_address:
-                return {'status': 'error', 'message': 'Nessun indirizzo trovato per questo utente', 'info': 'No address found for this user'}
+            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', partner_id)])
+            if not customer_address:
+                return {'status': 'error', 'message': 'Nessun indirizzo trovato per questo cliente', 'info': 'No address found for this customer'}
 
             # Update the default address
-            address = user_address.filtered(lambda a: a.id == address_id)
+            address = customer_address.filtered(lambda a: a.id == address_id)
             if address:
-                user_address.write({'default': False})  # Reset all addresses to not default
+                customer_address.write({'default': False})  # Reset all addresses to not default
                 address.write({'default': True})  # Set the selected one as default
             else:
                 return {'status': 'error', 'message': 'Indirizzo non trovato', 'info': 'Address not found'}
 
-            # Update the user model fields
-            user = request.env['res.users'].sudo().browse(user_id)
-            if not user:
-                return {'status': 'error', 'message': 'Utente non trovato', 'info': 'User not found'}
+            # Update the partner model fields
+            partner = request.env['res.partner'].sudo().browse(partner_id)
+            if not partner:
+                return {'status': 'error', 'message': 'Cliente non trovato', 'info': 'Customer not found'}
 
-            user.sudo().write({
+            partner.sudo().write({
                 'street': address.address,
                 'street2': address.continued_address + ' ' + address.village,
                 'city': address.city,
@@ -241,64 +235,84 @@ class UsersAuthApi(http.Controller):
                 'info': str(e),
                 'status_code': 500
             }
+    
 
 
-
+    # ---------------------- DOne ---------------------
     @http.route('/user/update_details', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def update_details(self):
         """
-        Description: Updates user profile details such as name and last name.
+        Description: Updates customer profile details such as name and last name.
         Parameters: name, last_name
         """
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
-        user_auth = SocialMediaAuth.user_auth(self)  # Assuming this is a custom authentication method
+        user_auth = SocialMediaAuth.user_auth(self)
         if user_auth['status'] == 'error':
             return {
                 'status': 'error',
                 'message': user_auth['message'],
                 'info': "Non authorized",
-                'status_code': 401  # Unauthorized
+                'status_code': 401
             }
 
-        user_id = user_auth['user_id']
+        customer_id = user_auth['user_id']  # This is now customer_id from the auth
         name = request.jsonrequest.get('name', False)
         last_name = request.jsonrequest.get('last_name', False)
 
         try:
-            user = request.env['res.users'].sudo().browse(user_id)
-            if not user:
-                return {'status': 'error', 'message': 'Utente non trovato', 'info': 'User not found'}
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', customer_id),
+                ('customer_rank', '>', 0)
+            ], limit=1)
 
-            # Update user details
-            user.sudo().write({
-                'name': name,  # Update if provided, otherwise keep existing
-                'x_last_name': last_name  # Custom field: ensure it exists
+            if not customer:
+                return {
+                    'status': 'error', 
+                    'message': 'Utente non trovato', 
+                    'info': 'User not found'
+                }
+
+            # Construct the full name if both name and last name are provided
+            if name and last_name:
+                full_name = f"{name} {last_name}"
+            elif name:
+                full_name = name
+            else:
+                full_name = customer.name  # Keep existing name if no new name provided
+
+            # Update customer details
+            customer.sudo().write({
+                'name': full_name,
             })
 
-            return {'status': 'success', 'message': 'Profilo aggiornato con successo', 'info': 'Profile updated successfully'}
+            return {
+                'status': 'success',
+                'message': 'Profilo aggiornato con successo',
+                'info': 'Profile updated successfully'
+            }
 
         except Exception as e:
-            _logger.error('Error updating user profile: %s', str(e))
+            _logger.error('Error updating customer profile: %s', str(e))
             return {
                 'status': 'error',
                 'message': 'Errore durante l\'aggiornamento del profilo',
                 'info': str(e),
                 'status_code': 500
-            }
-        
+            }  
 
+    # ---------------------- DOne ---------------------
     @http.route('/user/profile_image', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def profile_image(self):
         """
-        Description: Updates the user's profile image.
+        Description: Updates the customer's profile image.
         Parameters: image (file upload)
         """
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
-        user_auth = SocialMediaAuth.user_auth(self)  # Assuming this is a custom authentication method
+        user_auth = SocialMediaAuth.user_auth(self)
         if user_auth['status'] == 'error':
             return request.make_response(json.dumps({
                 'status': 'error',
@@ -306,7 +320,7 @@ class UsersAuthApi(http.Controller):
                 'info': 'Authentication failed'
             }), content_type='application/json', status=401)
 
-        user_id = user_auth['user_id']
+        customer_id = user_auth['user_id']  # This is now customer_id from the auth
         image_file = request.httprequest.files.get('image')
 
         if not image_file:
@@ -321,16 +335,20 @@ class UsersAuthApi(http.Controller):
             image_content = image_file.read()
             image_base64 = base64.b64encode(image_content).decode('utf-8')
 
-            user = request.env['res.users'].sudo().browse(user_id)
-            if not user:
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', customer_id),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
                 return Response(json.dumps({
                     'status': 'error',
                     'message': 'Utente non trovato',
                     'info': 'User not found'
                 }), content_type='application/json', status=404)
 
-            # Update the user's profile image
-            user.sudo().write({
+            # Update the customer's profile image
+            customer.sudo().write({
                 'image_1920': image_base64
             })
             
@@ -347,9 +365,9 @@ class UsersAuthApi(http.Controller):
                 'message': 'Errore durante l\'aggiornamento dell\'immagine del profilo',
                 'info': str(e)
             }), content_type='application/json', status=500)
-
         
 
+    # ---------------------- DOne ---------------------
     @http.route('/user/details', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def user_details(self):
         if request.httprequest.method == 'OPTIONS':
@@ -363,16 +381,20 @@ class UsersAuthApi(http.Controller):
                 'info': 'Authentication failed'
             }), content_type='application/json', status=401)
 
-        user_id = user_auth.get('user_id')
-        if not user_id:
+        customer_id = user_auth.get('user_id')  # This is now customer_id from auth
+        if not customer_id:
             return Response(json.dumps({
                 'status': 'error',
                 'message': 'Authentication failed',
                 'info': 'User ID missing from authentication'
             }), content_type='application/json', status=400)
 
-        user = request.env['res.users'].sudo().browse(user_id)
-        if not user:
+        customer = request.env['res.partner'].sudo().search([
+            ('id', '=', customer_id),
+            ('customer_rank', '>', 0)
+        ], limit=1)
+
+        if not customer:
             return Response(json.dumps({
                 'status': 'error',
                 'message': 'Utente non trovato',
@@ -380,42 +402,70 @@ class UsersAuthApi(http.Controller):
             }), content_type='application/json', status=404)
         
         try:
-            user_data = user.read(['name', 'login', 'email', 'phone', 'company_id', 'blocked_users', 'x_last_name', 'image_1920'])[0]
-            image = user_data.pop('image_1920', None)  
+            # Read customer data
+            customer_data = customer.read(['name', 'email', 'phone', 'mobile', 
+                                        'street', 'city', 'zip', 'country_id', 
+                                        'company_id', 'image_1920'])[0]
             
-            image_path = save_user_image(user_id, image)
-            user_data['image_path'] = image_path
+            # Handle image
+            # name and last name divide it by space
+            test = customer_data['name'].split(' ')[0]
+            customer_data['x_last_name'] = customer_data['name'].split(' ')[1]
+            customer_data['name'] = test
+
+            image = customer_data.pop('image_1920', None)
+            image_path = save_user_image(customer_id, image)  # Reusing the same image saving function
+            customer_data['image_path'] = f'/{image_path}'
 
             return Response(json.dumps({
                 'status': 'success',
-                'user': user_data
+                'user': customer_data  # Keeping 'user' key for consistency
             }), content_type='application/json')
 
         except Exception as e:
-            _logger.error('Error retrieving user details: %s', str(e))
+            _logger.error('Error retrieving customer details: %s', str(e))
             return Response(json.dumps({
                 'status': 'error',
                 'message': 'Errore durante il recupero dei dettagli dell\'utente',
                 'info': str(e)
             }), content_type='application/json', status=500)
-    
 
-
-    @http.route('/images/profilepics/<path:image>', type='http', auth='public', csrf=False,cors='*')
+    # ---------------------- DOne ---------------------
+    @http.route('/images/profilepics/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_image(self, image):
-        image_path = os.path.join('/mnt/extra-addons/images/profilepics', image)
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as f:
-                image_data = f.read()
-            return Response(image_data, content_type='image/png')
-        else:
-            return Response(json.dumps({
-                'error': {'message': 'Image not found'},
-                'status': 'error', 
-                'status_code': '404'
-            }), content_type='application/json', status=404)
-        
+        """
+        Serve images from the local images directory with security checks
+        """
+        try:
+            image_path = os.path.join('images/profilepics', image)
+            
+            # Basic path traversal protection
+            if not os.path.abspath(image_path).startswith(os.path.abspath('images/profilepics')):
+                return Response(json.dumps({
+                    'error': {'message': 'Invalid image path'},
+                    'status': 'error',
+                    'status_code': '403'
+                }), content_type='application/json', status=403)
 
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as f:
+                    image_data = f.read()
+                return Response(image_data, content_type='image/png')
+            else:
+                return Response(json.dumps({
+                    'error': {'message': 'Image not found'},
+                    'status': 'error',
+                    'status_code': '404'
+                }), content_type='application/json', status=404)
+        except Exception as e:
+            _logger.error('Error serving image: %s', str(e))
+            return Response(json.dumps({
+                'error': {'message': 'Server error'},
+                'status': 'error',
+                'status_code': '500'
+            }), content_type='application/json', status=500)
+
+    # ---------------------- DOne ---------------------
     @http.route('/countries_list', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def countries(self):
         """
@@ -440,8 +490,7 @@ class UsersAuthApi(http.Controller):
                 'info': str(e)
             }), content_type='application/json', status=500)
         
-
-
+    # ---------------------- DOne ---------------------
     @http.route('/states_list/<int:country_id>', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def states(self, country_id):
         """

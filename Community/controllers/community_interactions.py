@@ -49,11 +49,28 @@ class SocialMedia(http.Controller):
         try:
             # Ensure the directory exists
             file_path = Upload_image(image_file)
+            
+            # Get customer from auth
+            customer_id = user_auth['user_id']  # Assuming this is now customer_id from auth
+            
+            # Verify this is a valid customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', customer_id),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+            
+            if not customer:
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Invalid customer',
+                    'info': 'Customer not found or not authorized'
+                }), content_type='application/json', headers=headers, status=403)
+
             # Create the post in the database, storing the image path
-            post = request.env['social_media.post'].create({
+            post = request.env['social_media.post'].sudo().create({
                 'image': file_path,
                 'description': description,
-                'user_id': user_auth['user_id']
+                'partner_id': customer_id
             })
 
             return Response(json.dumps({
@@ -69,12 +86,12 @@ class SocialMedia(http.Controller):
                 'message': 'Failed to create post',
                 'info': str(e)
             }), content_type='application/json', headers=headers, status=500)
-        
+            
 
     @http.route('/social_media/get_posts', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_posts(self):
         """
-        Retrieve posts from social media model. It filters out posts from blacklisted users and formats the response.
+        Retrieve posts from social media model. It filters out posts from blocked customers and formats the response.
         Parameters: None
         """
         # Handle OPTIONS request for CORS preflight
@@ -90,46 +107,65 @@ class SocialMedia(http.Controller):
                     "info": "The user authentication failed"
                 }), content_type='application/json', status=401, headers={'Access-Control-Allow-Origin': '*'})
 
+            # Get all posts
             posts = request.env['social_media.post'].search([])
-            user_data = request.env['res.users'].sudo().search([('id', '=', user_auth['user_id'])])
-            user_data = user_data.read(['blocked_users'])
-            blocked_users = user_data[0]['blocked_users']
+            
+            # Get current customer's data including blocked customers
+            user_data = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ])
+            user_data = user_data.read(['blocked_customers'])
+            blocked_customers = user_data[0]['blocked_customers']
 
-            posts_data = [post for post in posts.read(['id', 'image', 'description', 'timestamp', 'user_id'])
-                          if post['user_id'][0] not in blocked_users]
+            # Filter posts and get basic data
+            posts_data = [post for post in posts.read(['id', 'image', 'description', 'timestamp', 'partner_id'])
+                        if post['partner_id'][0] not in blocked_customers]
 
             overall_data = []
             for post in posts_data:
-                if post['user_id'][0] in blocked_users:
+                if post['partner_id'][0] in blocked_customers:
                     continue
 
-                user_info = request.env['res.users'].sudo().search([('id', '=', post['user_id'][0])])
+                # Get customer info
+                user_info = request.env['res.partner'].sudo().search([
+                    ('id', '=', post['partner_id'][0]),
+                    ('customer_rank', '>', 0)
+                ])
                 
                 profile_image = get_user_profile_image_path(user_info.id)
 
                 post.update({
-                    'profile_image': profile_image,
-                    'user_name': f'{user_info.name} {user_info.x_last_name}',
+                    'profile_image': f'/{profile_image}',
+                    'user_name': user_info.name,
                     'image': post['image'] if post['image'] else None,
                     'timestamp': post['timestamp'].isoformat() if post['timestamp'] else None,
-                    'is_liked': bool(request.env['social_media.like'].search(
-                        [('user_id', '=', user_auth['user_id']), ('post_id', '=', post['id'])])),
-                    'likes': request.env['social_media.like'].search_count([('post_id', '=', post['id'])]),
-                    'comments_count': request.env['social_media.comment'].search_count([('post_id', '=', post['id'])]),
-                    'owner': post['user_id'][0] == user_auth['user_id']
+                    'is_liked': bool(request.env['social_media.like'].search([
+                        ('partner_id', '=', user_auth['user_id']), 
+                        ('post_id', '=', post['id'])
+                    ])),
+                    'likes': request.env['social_media.like'].search_count([
+                        ('post_id', '=', post['id'])
+                    ]),
+                    'comments_count': request.env['social_media.comment'].search_count([
+                        ('post_id', '=', post['id'])
+                    ]),
+                    'owner': post['partner_id'][0] == user_auth['user_id'],
+                    'user_id': [post['partner_id'][0], post['partner_id'][1]]
                 })
 
                 overall_data.append(post)
 
-
             overall_data.reverse()
 
-            return Response(json.dumps({"result":{
-                "status": "success",
-                "message": "Operazione riuscita", 
-                "posts": overall_data,
-                "info": f"Retrieved {len(overall_data)} posts"
-            }}), content_type='application/json', headers={'Access-Control-Allow-Origin': '*'})
+            return Response(json.dumps({
+                "result": {
+                    "status": "success",
+                    "message": "Operazione riuscita", 
+                    "posts": overall_data,
+                    "info": f"Retrieved {len(overall_data)} posts"
+                }
+            }), content_type='application/json', headers={'Access-Control-Allow-Origin': '*'})
         
         except Exception as e:
             return Response(json.dumps({
@@ -137,31 +173,49 @@ class SocialMedia(http.Controller):
                 "message": "Errore del server interno",  # Italian for 'Internal Server Error'
                 "info": str(e)
             }), content_type='application/json', status=500, headers={'Access-Control-Allow-Origin': '*'})
-        
+            
         
     @http.route('/images/community/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_image(self, image):
         """
-        Retrieve an image from the community images directory.
+        Retrieve an image from the community images directory with security checks.
         Parameters: image - The path of the image to retrieve.
         """
-        image_path = os.path.join('/mnt/extra-addons/images/community', image)
-        if os.path.exists(image_path):
-            with open(image_path, 'rb') as f:
-                image_data = f.read()
-            return Response(image_data, content_type='image/png')
-        else:
+        try:
+            image_path = os.path.join('images/community', image)
+            
+            # Basic path traversal protection
+            if not os.path.abspath(image_path).startswith(os.path.abspath('images/community')):
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Percorso immagine non valido',  # Italian for 'Invalid image path'
+                    'info': 'Invalid image path detected'
+                }), content_type='application/json', status=403)
+
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as f:
+                    image_data = f.read()
+                return Response(image_data, content_type='image/png')
+            else:
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Immagine non trovata',  # Italian for 'Image not found'
+                    'info': 'The requested image was not found'
+                }), content_type='application/json', status=404)
+                
+        except Exception as e:
+            _logger.error('Error serving community image: %s', str(e))
             return Response(json.dumps({
-                "status": "error",
-                "message": "Immagine non trovata",  # Italian for 'Image not found'
-                "info": "The requested image was not found on the server"
-            }), content_type='application/json', status=404)
+                'status': 'error',
+                'message': 'Errore del server',  # Italian for 'Server error'
+                'info': str(e)
+            }), content_type='application/json', status=500)
 
 
     @http.route('/social_media/delete_post/<int:post_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False, cors='*')
     def delete_post(self, post_id):
         """
-        Delete a post based on its ID if the authenticated user is the owner.
+        Delete a post based on its ID if the authenticated customer is the owner.
         Parameters: post_id - The ID of the post to delete.
         """
         # Handle OPTIONS request for CORS preflight
@@ -177,6 +231,20 @@ class SocialMedia(http.Controller):
                     "info": "User authentication failed"
                 }), content_type='application/json', status=401)
 
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return Response(json.dumps({
+                    "status": "error",
+                    "message": "Cliente non valido",  # Italian for 'Invalid customer'
+                    "info": "Invalid customer credentials"
+                }), content_type='application/json', status=403)
+
+            # Find the post
             post = request.env['social_media.post'].search([('id', '=', post_id)])
             if not post:
                 return Response(json.dumps({
@@ -185,20 +253,28 @@ class SocialMedia(http.Controller):
                     "info": "The post with the specified ID does not exist"
                 }), content_type='application/json', status=404)
 
-            if post.user_id.id != user_auth['user_id']:
+            # Check ownership
+            if post.partner_id.id != customer.id:
                 return Response(json.dumps({
                     "status": "error",
                     "message": "Non autorizzato a eliminare questo post",  # Italian for 'Not authorized to delete this post'
                     "info": "You are not authorized to delete this post"
                 }), content_type='application/json', status=403)
             
-            # remove the image from the directory
-            image_path = os.path.join('/mnt/extra-addons', post.image)
-            if os.path.exists(image_path):
-                os.remove(image_path)
+            # Remove the image if it exists
+            if post.image:
+                image_path = post.image
+                full_path = os.path.join(os.path.abspath(''), image_path)
+                
+                # Security check for path
+                if os.path.exists(full_path) and os.path.abspath(full_path).startswith(os.path.abspath('images')):
+                    try:
+                        os.remove(full_path)
+                    except OSError as e:
+                        _logger.error(f"Error removing image file: {str(e)}")
 
-            post.unlink()
-            
+            # Delete the post
+            post.sudo().unlink()
             
             return Response(json.dumps({
                 "status": "success",
@@ -207,6 +283,7 @@ class SocialMedia(http.Controller):
             }), content_type='application/json')
 
         except Exception as e:
+            _logger.error(f"Error deleting post: {str(e)}")
             return Response(json.dumps({
                 "status": "error",
                 "message": "Errore del server interno",  # Italian for 'Internal Server Error'
@@ -218,10 +295,9 @@ class SocialMedia(http.Controller):
     @http.route('/social_media/like', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def like_dislike_post(self):
         """
-        Toggle the like status of a post for the authenticated user. If the post is liked, it will be disliked, and vice versa.
+        Toggle the like status of a post for the authenticated customer.
         Parameters: None - Post ID is expected in the JSON request.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -230,38 +306,53 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return {
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
-                    "info": "User authentication failed"
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
                 }, 401
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return {
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }, 403
 
             post_id = request.jsonrequest.get('post_id')
             if not post_id:
                 return {
                     "status": "error",
-                    "message": "ID del post richiesto",  # Italian for 'post_id is required'
+                    "message": "ID del post richiesto",
                     "info": "The post ID is required for this operation"
                 }, 400
 
-            # if is liked then make it dislike and if not liked then make it like
-            default_userId = user_auth['user_id']
-            already_like = request.env['social_media.like'].search(
-                [('user_id', '=', default_userId), ('post_id', '=', post_id)])
+            # Check if already liked
+            already_like = request.env['social_media.like'].search([
+                ('partner_id', '=', customer.id),
+                ('post_id', '=', post_id)
+            ])
 
             if already_like:
                 already_like.unlink()
                 return {
                     "status": "success",
-                    "message": "Mi piace rimosso",  # Italian for 'Like removed'
+                    "message": "Mi piace rimosso",
                     "info": "Post disliked successfully"
                 }
 
+            # Create new like
             like = request.env['social_media.like'].create({
-                'user_id': default_userId,
+                'partner_id': customer.id,
                 'post_id': post_id
             })
             return {
                 "status": "success",
-                "message": "Mi piace aggiunto",  # Italian for 'Like added'
+                "message": "Mi piace aggiunto",
                 "info": "Post liked successfully",
                 "like_id": like.id
             }
@@ -269,18 +360,17 @@ class SocialMedia(http.Controller):
         except Exception as e:
             return {
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
-            },500
+            }, 500
 
 
     @http.route('/social_media/get_likes/<int:post_id>', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_likes(self, post_id):
         """
-        Retrieve all likes for a given post along with user information.
+        Retrieve all likes for a given post along with customer information.
         Parameters: post_id - The ID of the post for which likes are being retrieved.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -289,36 +379,39 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
-                    "info": "User authentication failed"
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
                 }), content_type='application/json', status=401)
 
             likes = request.env['social_media.like'].search([('post_id', '=', post_id)])
-            likes_data = likes.read(['user_id', 'timestamp'])
+            likes_data = likes.read(['partner_id', 'timestamp'])
 
             # Convert timestamp to ISO 8601 format if present
             for like in likes_data:
-                user_info = request.env['res.users'].sudo().search([('id', '=', like['user_id'][0])])
-                profile_image = get_user_profile_image_path(user_info.id)
+                customer_info = request.env['res.partner'].sudo().search([
+                    ('id', '=', like['partner_id'][0]),
+                    ('customer_rank', '>', 0)
+                ])
+                profile_image = get_user_profile_image_path(customer_info.id)
 
                 like.update({
                     'profile_image': profile_image,
-                    'user_name': f'{user_info.name} {user_info.x_last_name}',
+                    'user_name': customer_info.name,
                     'timestamp': like['timestamp'].isoformat() if like['timestamp'] else None
                 })
 
             result = {
                 "status": "success",
-                "message": "Mi piace recuperati con successo",  # Italian for 'Likes successfully retrieved'
+                "message": "Mi piace recuperati con successo",
                 "info": f"Retrieved likes for post ID {post_id}",
                 "likes": likes_data
             }
-            return Response(json.dumps({"result":result}), content_type='application/json')
+            return Response(json.dumps({"result": result}), content_type='application/json')
 
         except Exception as e:
             return Response(json.dumps({
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }), content_type='application/json', status=500)
 
@@ -326,10 +419,9 @@ class SocialMedia(http.Controller):
     @http.route('/social_media/add_comment', type='json', auth='public', methods=['POST', 'OPTIONS'])
     def create_comment(self):
         """
-        Create a comment on a post for the authenticated user.
+        Create a comment on a post for the authenticated customer.
         Parameters: None - Post ID and content are expected in the JSON request.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -338,46 +430,56 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return {
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
-                    "info": "User authentication failed"
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
                 }, 401
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return {
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }, 403
 
             post_id = request.jsonrequest.get('post_id')
             content = request.jsonrequest.get('content')
             if not post_id or not content:
                 return {
                     "status": "error",
-                    "message": "ID del post e contenuto sono richiesti",  # Italian for 'Both post_id and content are required'
+                    "message": "ID del post e contenuto sono richiesti",
                     "info": "Both post ID and content must be provided for comment creation"
                 }, 400
 
             comment = request.env['social_media.comment'].create({
-                'user_id': user_auth['user_id'],
+                'partner_id': customer.id,
                 'post_id': int(post_id),
                 'content': content
             })
             return {
                 "status": "success",
-                "message": "Commento creato con successo",  # Italian for 'Comment created successfully'
+                "message": "Commento creato con successo",
                 "info": f"Comment ID {comment.id} added to post ID {post_id}"
             }
 
         except Exception as e:
             return {
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }, 500
-        
 
-    # report comment in comment_report by taking comment_id in body
     @http.route('/social_media/report_comment', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def report_comment(self):
         """
-        Report a comment as inappropriate by the authenticated user. The method handles both reporting and unreporting of a comment.
+        Report a comment as inappropriate by the authenticated customer.
         Parameters: None - Comment ID is expected in the JSON request.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -386,44 +488,68 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return {
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
-                    "info": "User authentication failed, unable to report the comment"
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed, unable to report the comment"
                 }, 401
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return {
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }, 403
 
             comment_id = request.jsonrequest.get('comment_id')
             if not comment_id:
                 return {
                     "status": "error",
-                    "message": "ID del commento richiesto",  # Italian for 'Comment ID required'
+                    "message": "ID del commento richiesto",
                     "info": "Comment ID is required for reporting"
                 }, 400
 
-            # Checking if the comment has already been reported by the user
-            already_reported = request.env['social_media.comment_report'].search(
-                [('user_id', '=', user_auth['user_id']), ('comment_id', '=', comment_id)])
+            # Check if comment exists
+            comment = request.env['social_media.comment'].sudo().browse(comment_id)
+            if not comment.exists():
+                return {
+                    "status": "error",
+                    "message": "Commento non trovato",
+                    "info": "Comment not found"
+                }, 404
+
+            # Check if already reported
+            already_reported = request.env['social_media.comment_report'].search([
+                ('partner_id', '=', customer.id),
+                ('comment_id', '=', comment_id)
+            ])
 
             if already_reported:
                 already_reported.unlink()
                 return {
                     "status": "success",
-                    "message": "Segnalazione commento annullata con successo",  # Italian for 'Comment report successfully undone'
+                    "message": "Segnalazione commento annullata con successo",
                     "info": "Report for the comment has been successfully removed"
                 }
 
             report = request.env['social_media.comment_report'].create({
-                'user_id': user_auth['user_id'],
+                'partner_id': customer.id,
                 'comment_id': comment_id
             })
             return {
                 "status": "success",
-                "message": "Commento segnalato con successo",  # Italian for 'Comment successfully reported'
+                "message": "Commento segnalato con successo",
                 "info": f"Comment report ID {report.id} has been successfully created"
             }
 
         except Exception as e:
             return {
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }, 500
 
@@ -431,10 +557,9 @@ class SocialMedia(http.Controller):
     @http.route('/social_media/get_comments/<int:post_id>', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_comments(self, post_id):
         """
-        Retrieve all comments for a given post along with user information, like status, and total likes for each comment.
+        Retrieve all comments for a given post along with customer information, like status, and total likes for each comment.
         Parameters: post_id - The ID of the post for which comments are being retrieved.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -443,56 +568,77 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
-                    "info": "User authentication failed"
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
                 }), content_type='application/json', status=401)
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return Response(json.dumps({
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }), content_type='application/json', status=403)
 
             if not post_id:
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "ID del post richiesto",  # Italian for 'post_id is required'
+                    "message": "ID del post richiesto",
                     "info": "The post ID is required for retrieving comments"
                 }), content_type='application/json', status=400)
 
             comments = request.env['social_media.comment'].search([('post_id', '=', post_id)])
-            comments_data = comments.read(['user_id', 'content', 'timestamp'])
+            comments_data = comments.read(['partner_id', 'content', 'timestamp'])
 
             for comment in comments_data:
-                user_info = request.env['res.users'].sudo().search([('id', '=', comment['user_id'][0])])
+                customer_info = request.env['res.partner'].sudo().search([
+                    ('id', '=', comment['partner_id'][0]),
+                    ('customer_rank', '>', 0)
+                ])
 
-                profile_image = get_user_profile_image_path(user_info.id)
+                profile_image = get_user_profile_image_path(customer_info.id)
 
                 comment.update({
-                    'profile_image': profile_image,
-                    'user_name': f'{user_info.name} {user_info.x_last_name}',
+                    'profile_image':f'/{profile_image}',
+                    'user_name': customer_info.name,
                     'timestamp': comment['timestamp'].isoformat() if 'timestamp' in comment and comment['timestamp'] else None,
-                    'is_liked': bool(request.env['social_media.comment_like'].search(
-                        [('user_id', '=', user_auth['user_id']), ('comment_id', '=', comment['id'])])),
-                    'likes_count': request.env['social_media.comment_like'].search_count([('comment_id', '=', comment['id'])])
+                    'is_liked': bool(request.env['social_media.comment_like'].search([
+                        ('partner_id', '=', user_auth['user_id']),
+                        ('comment_id', '=', comment['id'])
+                    ])),
+                    'likes_count': request.env['social_media.comment_like'].search_count([
+                        ('comment_id', '=', comment['id'])
+                    ]),
+                    'user_id' : [comment['partner_id'][0], comment['partner_id'][1] ]
+
                 })
+
             final_data = {
                 "status": "success",
-                "message": "Commenti recuperati con successo",  # Italian for 'Comments retrieved successfully'
+                "message": "Commenti recuperati con successo",
                 "info": f"Retrieved comments for post ID {post_id}",
                 "comments": comments_data
             }
-            return Response(json.dumps({"result":final_data}), content_type='application/json')
+            return Response(json.dumps({"result": final_data}), content_type='application/json')
 
         except Exception as e:
             return Response(json.dumps({
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }), content_type='application/json', status=500)
 
-
-    @http.route('/social_media/delete_comment/<int:comment_id>', type='http', auth='user', methods=['DELETE', 'OPTIONS'], csrf=False, cors='*')
+    @http.route('/social_media/delete_comment/<int:comment_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False, cors='*')
     def delete_comments(self, comment_id):
         """
-        Delete a comment based on its ID if the authenticated user is the owner of the comment.
+        Delete a comment based on its ID if the authenticated customer is the owner of the comment.
         Parameters: comment_id - The ID of the comment to delete.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -501,14 +647,27 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return Response(json.dumps({
                     "status": "error",
-                    "message": user_auth.get('message', 'Non autorizzato'),  # Defaulting to Italian 'Unauthorized'
-                    "info": "User authentication failed"
+                    "message": user_auth.get('message', 'Non autorizzato'),
+                    "info": "Customer authentication failed"
                 }), content_type='application/json', status=401)
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return Response(json.dumps({
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }), content_type='application/json', status=403)
 
             if not comment_id:
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "comment_id è richiesto",  # Italian for 'comment_id is required'
+                    "message": "comment_id è richiesto",
                     "info": "The comment ID is required for deletion"
                 }), content_type='application/json', status=400)
 
@@ -516,99 +675,111 @@ class SocialMedia(http.Controller):
             if not comment:
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "Il commento non esiste",  # Italian for 'The comment does not exist'
+                    "message": "Il commento non esiste",
                     "info": "No comment found with the provided ID"
                 }), content_type='application/json', status=404)
 
-            if comment.user_id.id != user_auth['user_id']:
+            if comment.partner_id.id != customer.id:
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "Non sei autorizzato a eliminare questo commento",  # Italian for 'You are not authorized to delete this comment'
+                    "message": "Non sei autorizzato a eliminare questo commento",
                     "info": "Only the owner of the comment can delete it"
                 }), content_type='application/json', status=403)
 
-            comment.unlink()
+            comment.sudo().unlink()
             final_resp = {
                 "status": "success",
-                "message": "Commento eliminato con successo",  # Italian for 'Comment successfully deleted'
+                "message": "Commento eliminato con successo",
                 "info": "The comment has been successfully deleted"
             }
-            return Response(json.dumps({"result":final_resp}), content_type='application/json')
+            return Response(json.dumps({"result": final_resp}), content_type='application/json')
 
         except Exception as e:
             return Response(json.dumps({
                 "status": "error",
-                "message": "Errore durante l'eliminazione del commento",  # Italian for 'Error during comment deletion'
+                "message": "Errore durante l'eliminazione del commento",
                 "info": str(e)
-            }), content_type='application/json', status=500)    
+            }), content_type='application/json', status=500)   
 
         
 
     @http.route('/social_media/like_comment', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def like_comment(self):
         """
-        Toggle the like status of a comment for the authenticated user. If the comment is liked, it will be disliked, and vice versa.
+        Toggle the like status of a comment for the authenticated customer.
         Parameters: None - Comment ID is expected in the JSON request.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
         try:
             user_auth = SocialMediaAuth.user_auth(self)
             if user_auth['status'] == 'error':
-                return Response(json.dumps({
+                return {
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
-                    "info": "User authentication failed"
-                }), content_type='application/json', status=401)
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
+                }, 401
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return {
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }, 403
 
             comment_id = request.jsonrequest.get('comment_id')
             if not comment_id:
-                return Response(json.dumps({
+                return {
                     "status": "error",
-                    "message": "ID del commento richiesto",  # Italian for 'comment_id is required'
+                    "message": "ID del commento richiesto",
                     "info": "Comment ID is required for this operation"
-                }), content_type='application/json', status=400)
+                }, 400
 
-            # if user has liked the comment then make it dislike and if not liked then make it like
-            already_like = request.env['social_media.comment_like'].search(
-                [('user_id', '=', user_auth['user_id']), ('comment_id', '=', comment_id)])
+            # Check if already liked
+            already_like = request.env['social_media.comment_like'].search([
+                ('partner_id', '=', customer.id),
+                ('comment_id', '=', comment_id)
+            ])
+            
             if already_like:
                 already_like.unlink()
                 return {
                     "status": "success",
-                    "message": "Mi piace al commento rimosso",  # Italian for 'Like on the comment removed'
+                    "message": "Mi piace al commento rimosso",
                     "info": "Comment disliked successfully"
                 }
 
             like = request.env['social_media.comment_like'].create({
-                'user_id': user_auth['user_id'],
+                'partner_id': customer.id,
                 'comment_id': comment_id
             })
             return {
                 "status": "success",
-                "message": "Mi piace al commento aggiunto",  # Italian for 'Like on the comment added'
+                "message": "Mi piace al commento aggiunto",
                 "info": f"Comment liked successfully, like ID {like.id}"
             }
 
         except Exception as e:
-            return  {
+            return {
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }, 500
-        
-
 
 
     @http.route('/social_media/get_comment_likes/<int:comment_id>', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_comment_likes(self, comment_id):
         """
-        Retrieve all likes for a given comment, including the user who liked and the timestamp of the like.
+        Retrieve all likes for a given comment, including the customer who liked and the timestamp.
         Parameters: comment_id - The ID of the comment for which likes are being retrieved.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -617,37 +788,57 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
-                    "info": "User authentication failed"
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
                 }), content_type='application/json', status=401)
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return Response(json.dumps({
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }), content_type='application/json', status=403)
 
             if not comment_id:
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "ID del commento richiesto",  # Italian for 'comment_id is required'
+                    "message": "ID del commento richiesto",
                     "info": "Comment ID is required to retrieve likes"
                 }), content_type='application/json', status=400)
 
+            # Get likes
             likes = request.env['social_media.comment_like'].search([('comment_id', '=', comment_id)])
-            likes_data = likes.read(['user_id', 'timestamp'])
+            likes_data = likes.read(['partner_id', 'timestamp'])
 
-            # Convert timestamp to ISO 8601 format if present
+            # Enhance like data with customer information
             for like in likes_data:
-                if 'timestamp' in like and like['timestamp']:
-                    like['timestamp'] = like['timestamp'].isoformat()
+                customer_info = request.env['res.partner'].sudo().search([
+                    ('id', '=', like['partner_id'][0]),
+                    ('customer_rank', '>', 0)
+                ])
+                like.update({
+                    'customer_name': customer_info.name,
+                    'timestamp': like['timestamp'].isoformat() if like['timestamp'] else None
+                })
 
             final_resp = {
                 "status": "success",
-                "message": "Mi piace al commento recuperati con successo",  # Italian for 'Likes on the comment successfully retrieved'
+                "message": "Mi piace al commento recuperati con successo",
                 "info": f"Retrieved likes for comment ID {comment_id}",
                 "likes": likes_data
             }
-            return Response(json.dumps({"result":final_resp}), content_type='application/json')
+            return Response(json.dumps({"result": final_resp}), content_type='application/json')
 
         except Exception as e:
             return Response(json.dumps({
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }), content_type='application/json', status=500)
         
@@ -656,10 +847,9 @@ class SocialMedia(http.Controller):
     @http.route('/social_media/block_user', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def block_user(self):
         """
-        Block or unblock a user. If the user is currently blocked, they will be unblocked, and vice versa.
-        Parameters: None - Blocked user ID is expected in the JSON request.
+        Block or unblock a customer. If the customer is currently blocked, they will be unblocked, and vice versa.
+        Parameters: None - Blocked customer ID is expected in the JSON request.
         """
-        # Handle OPTIONS request for CORS preflight
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -668,141 +858,154 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return {
                     "status": "error",
-                    "message": user_auth.get('message', 'Non autorizzato'),  # Defaulting to Italian 'Unauthorized'
-                    "info": "User authentication failed"
-                }
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
+                }, 401
 
-            blocked_user_id = request.jsonrequest.get('blocked_user_id')
-            if not blocked_user_id:
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
                 return {
                     "status": "error",
-                    "message": "ID dell'utente da bloccare richiesto",  # Italian for 'Blocked user ID required'
-                    "info": "The blocked user ID is required for this operation"
-                }
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }, 403
 
-            default_user_id = user_auth['user_id']
-            if int(blocked_user_id) == default_user_id:
+            blocked_customer_id = request.jsonrequest.get('blocked_customer_id')
+            if not blocked_customer_id:
                 return {
                     "status": "error",
-                    "message": "Non puoi bloccare o sbloccare te stesso",  # Italian for 'You cannot block or unblock yourself'
-                    "info": "A user cannot block or unblock themselves"
-                }
+                    "message": "ID del cliente da bloccare richiesto",
+                    "info": "The blocked customer ID is required for this operation"
+                }, 400
 
-            # Fetch the user to block
-            blocked_user = request.env['res.users'].sudo().search([('id', '=', blocked_user_id)], limit=1)
-            if not blocked_user:
+            if int(blocked_customer_id) == customer.id:
                 return {
                     "status": "error",
-                    "message": "L'utente da bloccare non esiste",  # Italian for 'The user to block does not exist'
-                    "info": "No user found with the provided ID"
-                }
+                    "message": "Non puoi bloccare o sbloccare te stesso",
+                    "info": "A customer cannot block or unblock themselves"
+                }, 400
 
-            # Fetch the current user's record
-            current_user = request.env['res.users'].sudo().search([('id', '=', default_user_id)], limit=1)
+            # Fetch the customer to block
+            blocked_customer = request.env['res.partner'].sudo().search([
+                ('id', '=', blocked_customer_id),
+                ('customer_rank', '>', 0)
+            ], limit=1)
 
-            # Check if the user is already blocked
-            if blocked_user in current_user.blocked_users:
-                current_user.write({'blocked_users': [(3, blocked_user.id)]})  # Removes the user from blocked users
+            if not blocked_customer:
+                return {
+                    "status": "error",
+                    "message": "Il cliente da bloccare non esiste",
+                    "info": "No customer found with the provided ID"
+                }, 404
+
+            # Check if the customer is already blocked
+            already_blocked = request.env['social_media.blocked_customer'].search([
+                ('customer_id', '=', customer.id),
+                ('blocked_customer_id', '=', blocked_customer.id)
+            ])
+
+            if already_blocked:
+                already_blocked.unlink()
                 return {
                     "status": "success",
-                    "message": "Utente sbloccato con successo",  # Italian for 'User successfully unblocked'
-                    "info": "The user has been successfully unblocked"
+                    "message": "Cliente sbloccato con successo",
+                    "info": "The customer has been successfully unblocked"
                 }
 
-            current_user.write({'blocked_users': [(4, blocked_user.id)]})  # Adds the user to blocked users
+            # Create new block record
+            request.env['social_media.blocked_customer'].create({
+                'customer_id': customer.id,
+                'blocked_customer_id': blocked_customer.id
+            })
+
             return {
                 "status": "success",
-                "message": "Utente bloccato con successo",  # Italian for 'User successfully blocked'
-                "info": "The user has been successfully blocked"
+                "message": "Cliente bloccato con successo",
+                "info": "The customer has been successfully blocked"
             }
 
         except Exception as e:
             return {
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }, 500
-
         
 
     @http.route('/social_media/report_post', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def report_post(self):
         """
-        Report a post for review. Prevents duplicate reports by the same user on the same post.
+        Report a post for review. Prevents duplicate reports by the same customer on the same post.
         Parameters: None - Post ID is expected in the JSON request.
         """
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
-        user_auth = SocialMediaAuth.user_auth(self)
-        if user_auth['status'] == 'error':
-            return {
-                "status": "error",
-                "message": user_auth.get('message', 'Non autorizzato'),  # Defaulting to Italian 'Unauthorized'
-                "info": "User authentication failed"
-            }, 401
-
-        post_id = request.jsonrequest.get('post_id')
-        if not post_id:
-            return {
-                "status": "error",
-                "message": "ID del post richiesto",  # Italian for 'Post ID required'
-                "info": "The post ID is required to report the post"
-            }, 400
-
-        default_user_id = user_auth['user_id']
-        report = request.env['social_media.report'].search([('post_id', '=', post_id), ('user_id', '=', default_user_id)])
-        if report:
-            return {
-                "status": "error",
-                "message": "Post già segnalato",  # Italian for 'Post already reported'
-                "info": "You have already reported this post"
-            }
-
         try:
+            user_auth = SocialMediaAuth.user_auth(self)
+            if user_auth['status'] == 'error':
+                return {
+                    "status": "error",
+                    "message": "Non autorizzato",
+                    "info": "Customer authentication failed"
+                }, 401
+
+            # Verify customer
+            customer = request.env['res.partner'].sudo().search([
+                ('id', '=', user_auth['user_id']),
+                ('customer_rank', '>', 0)
+            ], limit=1)
+
+            if not customer:
+                return {
+                    "status": "error",
+                    "message": "Cliente non valido",
+                    "info": "Invalid customer credentials"
+                }, 403
+
+            post_id = request.jsonrequest.get('post_id')
+            if not post_id:
+                return {
+                    "status": "error",
+                    "message": "ID del post richiesto",
+                    "info": "The post ID is required to report the post"
+                }, 400
+
+            # Check if already reported
+            report = request.env['social_media.report'].search([
+                ('post_id', '=', post_id), 
+                ('partner_id', '=', customer.id)
+            ])
+
+            if report:
+                return {
+                    "status": "error",
+                    "message": "Post già segnalato",
+                    "info": "You have already reported this post"
+                }, 400
+
+            # Create new report
             report = request.env['social_media.report'].create({
                 'post_id': post_id,
-                'user_id': default_user_id
+                'partner_id': customer.id
             })
+
             return {
                 "status": "success",
-                "message": "Post segnalato con successo",  # Italian for 'Post successfully reported'
+                "message": "Post segnalato con successo",
                 "info": f"Report ID {report.id} has been successfully created"
             }
 
         except Exception as e:
             return {
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
             }, 500
-
-    
-    @http.route('/social_media/get_reported_posts', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
-    def get_reported_posts(self):
-        """
-        Retrieve all reported posts with the details of the reporting users.
-        Parameters: None
-        """
-        if request.httprequest.method == 'OPTIONS':
-            return self._handle_options()
-
-        try:
-            reported_posts = request.env['social_media.report'].search([])
-            reported_posts_data = reported_posts.read(['post_id', 'user_id'])
-
-            return Response(json.dumps({"result":{
-                "status": "success",
-                "message": "Post segnalati recuperati con successo",  # Italian for 'Reported posts successfully retrieved'
-                "info": f"Retrieved {len(reported_posts_data)} reported posts",
-                "reported_posts": reported_posts_data
-            }}), content_type='application/json')
-
-        except Exception as e:
-            return Response(json.dumps({
-                "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
-                "info": str(e)
-            }), content_type='application/json', status=500)
         
-    
+        

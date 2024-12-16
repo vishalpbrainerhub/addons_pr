@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <menuitem id="menu_social_media" name="Gestione della Comunità" sequence="10"/>
 
@@ -13,7 +14,7 @@
                 <field name="report_count" string="Segnalazioni"/>
                 <field name="likes_count" string="Mi piace"/>
                 <field name="comments_count" string="Commenti"/>
-                <field name="user_id" string="Utente"/>
+                <field name="partner_id" string="Cliente"/>
                 <field name="image_view" widget="html" string="Immagine"/>
             </tree>
         </field>
@@ -26,7 +27,7 @@
             <form>
                 <sheet>
                     <group>
-                        <field name="user_id" string="Utente"/>
+                        <field name="partner_id" string="Cliente"/>
                         <field name="image_view" widget="html" string="Immagine"/>
                         <field name="description" string="Descrizione"/>
                         <field name="timestamp" string="Data"/>
@@ -35,7 +36,7 @@
                         <page string="Mi piace">
                             <field name="likes" string="Mi piace">
                                 <tree>
-                                    <field name="user_id" string="Utente"/>
+                                    <field name="partner_id" string="Cliente"/>
                                     <field name="timestamp" string="Data"/>
                                 </tree>
                             </field>
@@ -43,9 +44,9 @@
                         <page string="Commenti">
                             <field name="comments" string="Commenti">
                                 <tree decoration-info="comment_reports==0" decoration-muted="comment_reports>0" decoration-bf="like_comments_count>0">
-                                    <field name="content" string="Commento" />
-                                    <field name="user_id" string="Utente" />
-                                    <field name="timestamp" string="Data" />
+                                    <field name="content" string="Commento"/>
+                                    <field name="partner_id" string="Cliente"/>
+                                    <field name="timestamp" string="Data"/>
                                     <field name="like_comments_count" string="Mi piace" widget="integer"/>
                                     <field name="report_comments_count" string="Segnalazioni" widget="integer"/>
                                     <field name="comment_likes" widget="many2many_tags" string="Apprezzato da"/>
@@ -56,7 +57,7 @@
                         <page string="Segnalazioni del post">
                             <field name="reports" string="Segnalazioni">
                                 <tree>
-                                    <field name="user_id" string="Utente"/>
+                                    <field name="partner_id" string="Cliente"/>
                                 </tree>
                             </field>
                         </page>
@@ -81,17 +82,15 @@
 
     <menuitem id="menu_social_media_posts" name="Post" parent="menu_social_media" action="action_posts" sequence="10"/>
 
-    <!-- user address -->
+    <!-- Customer address -->
     <menuitem id="menu_social_media_addresses" name="Indirizzi" parent="menu_social_media" sequence="15"/>
 
-    <!-- Action to open Address view -->
     <record id="action_addresses" model="ir.actions.act_window">
         <field name="name">Indirizzi</field>
         <field name="res_model">social_media.custom_address</field>
         <field name="view_mode">tree,form</field>
     </record>
 
-    <!-- Link the action to the submenu -->
     <menuitem id="submenu_social_media_addresses" name="Gestisci Indirizzi" parent="menu_social_media_addresses" action="action_addresses" sequence="10"/>
 
     <record id="view_address_tree" model="ir.ui.view">
@@ -99,7 +98,7 @@
         <field name="model">social_media.custom_address</field>
         <field name="arch" type="xml">
             <tree>
-                <field name="user_id" string="Utente"/>
+                <field name="partner_id" string="Cliente"/>
                 <field name="address" string="Indirizzo"/>
                 <field name="city" string="Città"/>
                 <field name="postal_code" string="CAP"/>
@@ -109,7 +108,6 @@
         </field>
     </record>
 
-    <!-- Form View for Addresses -->
     <record id="view_address_form" model="ir.ui.view">
         <field name="name">social_media.address.form</field>
         <field name="model">social_media.custom_address</field>
@@ -117,7 +115,7 @@
             <form>
                 <sheet>
                     <group>
-                        <field name="user_id" string="Utente"/>
+                        <field name="partner_id" string="Cliente"/>
                         <field name="address" string="Indirizzo"/>
                         <field name="continued_address" string="Indirizzo Continuato"/>
                         <field name="city" string="Città"/>
@@ -132,7 +130,6 @@
         </field>
     </record>
 
-    <!-- Actions for viewing all addresses and default address separately -->
     <record id="action_default_addresses" model="ir.actions.act_window">
         <field name="name">Indirizzo Predefinito</field>
         <field name="res_model">social_media.custom_address</field>
@@ -142,33 +139,32 @@
 
     <menuitem id="submenu_social_media_default_address" name="Indirizzo Predefinito" parent="menu_social_media_addresses" action="action_default_addresses" sequence="5"/>
 
-    <!-- user's info -->
-    <record id="action_user_info" model="ir.actions.act_window">
-        <field name="name">Informazioni Utente</field>
-        <field name="res_model">res.users</field>
+    <!-- Customer's info -->
+    <record id="action_customer_info" model="ir.actions.act_window">
+        <field name="name">Informazioni Cliente</field>
+        <field name="res_model">res.partner</field>
         <field name="view_mode">tree,form</field>
+        <field name="domain">[('customer_rank', '>', 0)]</field>
     </record>
 
-    <menuitem id="menu_user_info" name="Informazioni Utente" parent="menu_social_media" action="action_user_info" sequence="20"/>
+    <menuitem id="menu_customer_info" name="Informazioni Cliente" parent="menu_social_media" action="action_customer_info" sequence="20"/>
 
-    <record id="view_res_users_form_inherit_blocked" model="ir.ui.view">
-        <field name="name">res.users.form.inherit.blocked</field>
-        <field name="model">res.users</field>
-        <field name="inherit_id" ref="base.view_users_form"/>
+    <record id="view_res_partner_form_inherit_blocked" model="ir.ui.view">
+        <field name="name">res.partner.form.inherit.blocked</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
         <field name="arch" type="xml">
-            <sheet>
-                <group string="Utenti Bloccati" class="oe_title">
-                    <!-- Add field for Blocked Users -->
-                    <field name="blocked_users" widget="many2many_tags" options="{'no_create': True}" colspan="4" class="oe_inline"/>
-                </group>
-            </sheet>
+            <xpath expr="//notebook" position="inside">
+                <page string="Clienti Bloccati">
+                    <group>
+                        <field name="blocked_customers" widget="many2many_tags" options="{'no_create': True}" colspan="4"/>
+                    </group>
+                </page>
+            </xpath>
         </field>
     </record>
 
-
-
-    <!-- Banner Model View -->
-
+    <!-- Banner Views -->
     <record id="view_banner_tree" model="ir.ui.view">
         <field name="name">social_media.banner.tree</field>
         <field name="model">social_media.banner</field>
@@ -197,7 +193,6 @@
             </form>
         </field>
     </record>
-    
 
     <record id="action_banners" model="ir.actions.act_window">
         <field name="name">Banners</field>
@@ -205,9 +200,6 @@
         <field name="view_mode">tree,form</field>
     </record>
 
-    <!-- Banner Menu Item -->
     <menuitem id="menu_social_media_banners" name="Banners" parent="menu_social_media" action="action_banners" sequence="30"/>
-
-
 
 </odoo>

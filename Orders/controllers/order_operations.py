@@ -1,664 +1,436 @@
-from odoo import http, _
+from odoo import http, _ , fields
 from odoo.http import request, Response
 import json
 from datetime import datetime
-from .user_authentication import user_auth
+from .user_authentication import SocialMediaAuth
 
 class Ecommerce_orders(http.Controller):
+    
+    def _calculate_vat(self, order):
+        vat_1_percentage = 0
+        vat_2_percentage = 0
+        vat_1_value = 0 
+        vat_2_value = 0
 
-    # get order details
+        if order.order_line:
+            line_taxes = order.order_line[0].tax_id
+            if line_taxes:
+                sorted_taxes = sorted(line_taxes, key=lambda x: x.amount)
+                if len(sorted_taxes) >= 1:
+                    vat_1_percentage = sorted_taxes[0].amount
+                    vat_1_value = order.amount_untaxed * (vat_1_percentage/100)
+                if len(sorted_taxes) >= 2:  
+                    vat_2_percentage = sorted_taxes[1].amount
+                    vat_2_value = order.amount_untaxed * (vat_2_percentage/100)
+
+        return {
+            'vat_1_percentage': vat_1_percentage,
+            'vat_2_percentage': vat_2_percentage, 
+            'vat_1_value': vat_1_value,
+            'vat_2_value': vat_2_value
+        }
+
+
+    def _get_price_from_pricelist(self, product, partner_id, quantity=1.0):
+        partner = request.env['res.partner'].sudo().browse(partner_id)
+        pricelist = partner.property_product_pricelist
+        
+        pricelist_items = request.env['product.pricelist.item'].sudo().search([
+            ('pricelist_id', '=', pricelist.id),
+            ('product_id', '=', product.id),
+            '|',
+            ('date_start', '<=', fields.Date.today()),
+            ('date_start', '=', False),
+            '|', 
+            ('date_end', '>=', fields.Date.today()),
+            ('date_end', '=', False),
+            ('min_quantity', '<=', quantity)
+        ], order='min_quantity desc')
+
+        if not pricelist_items:
+            return product.list_price
+
+        item = pricelist_items[0]
+        
+        if item.compute_price == 'fixed':
+            price = item.fixed_price
+        elif item.compute_price == 'percentage':
+            price = product.list_price * (1 - item.percent_price / 100)
+        else:
+            price = product.list_price
+
+        if pricelist.currency_id != product.currency_id:
+            price = product.currency_id._convert(
+                price,
+                pricelist.currency_id,
+                product.company_id,
+                fields.Date.today()
+            )
+            
+        return price
+
     @http.route('/api/orders/<int:order_id>', auth='public', type='http', methods=['GET'])
     def get_order_single(self, order_id):
-        """
-        description : Retrieve the order details based on the provided order ID.
-        parameters : order_id (int)
-        """
         try:
-            # Check if order ID is provided
-            if not order_id:
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': 'ID dell\'ordine non fornito.',  # Error message in Italian
-                        'info': 'No order ID provided.'  # English description
-                    }),
-                    content_type='application/json',
-                    status=400,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': user['message'],
+                    'info': 'Authentication failed.'
+                }), content_type='application/json', status=401)
 
-            # Search for the order with the given ID
+            partner_id = user['user_id']
             orders = request.env['sale.order'].sudo().search([
-                ('id', '=', order_id)
+                ('id', '=', order_id),
+                ('partner_id', '=', partner_id)
             ])
 
             if not orders:
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': 'Ordine non trovato.',  # Error message in Italian
-                        'info': 'Order not found.'  # English description
-                    }),
-                    content_type='application/json',
-                    status=404,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Ordine non trovato.',
+                    'info': 'Order not found.'
+                }), content_type='application/json', status=404)
 
-            # Fetch reward points associated with the order
             order_reward_points = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)]).points
             response_data = []
 
             for order in orders:
-                # Retrieve shipping address
                 user_address = request.env['social_media.custom_address'].sudo().search([
                     ('id', '=', order.shipping_address_id)
                 ])
-
                 shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+                vat_data = self._calculate_vat(order)
 
-                # Prepare order data
                 order_data = {
                     'id': order.id,
                     'name': order.name,
                     'state': order.state,
-                    'taxable_amount': order.amount_total,
-                    'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
-                    'partner_id': order.partner_id.id,
-                    'partner_name': order.partner_id.name,
-                    'partner_email': order.partner_id.email,
-                    'partner_phone': order.partner_id.phone,
-                    'partner_address': shipping_address, 
-
-                    # I have set the VAT percentages to 0 as they are not provided in the scope.
-                    'vat_1_percentage': 0,
-                    'vat_2_percentage': 0,
-                    'shipping_charge': 450,
-                    'vat_1_value': 0,
-                    'vat_2_value': 0,
-                    'total_amount': order.amount_total + 450 + (order.amount_total * 0) + (order.amount_total * 0),
-                    'reward_points': order_reward_points,
-                    'all_products': []
-                }
-
-                # Loop through order lines to get product details
-                for line in order.order_line:
-                    image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
-                    discount_percentage = request.env['product.template'].sudo().search([('id', '=', line.product_id.id)]).discount
-
-                    product_data = {
-                        'id': line.product_id.id,
-                        'name': line.product_id.name,
-                        'list_price': line.price_unit * line.product_uom_qty,
-                        'active': line.product_id.active,
-                        'barcode': line.product_id.barcode,
-                        'color': line.product_id.color,
-                        'image': image_url,
-                        'quantity': line.product_uom_qty,
-                        'base_price': line.product_id.list_price,
-                        'discount': discount_percentage,
-                        'order_id': line.order_id.id,
-                        'code': line.product_id.code_,
-                    }
-
-                    order_data['all_products'].append(product_data)
-
-                response_data.append(order_data)
-
-            # Success response
-            return Response(
-                json.dumps(response_data),
-                content_type='application/json',
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-
-        except Exception as e:
-            # Error response
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'message': 'Si è verificato un errore durante il recupero dei dettagli dell\'ordine.',  # Error message in Italian
-                    'info': str(e)  # English error description
-                }),
-                content_type='application/json',
-                status=500,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-
-
-
-    @http.route('/api/orders', auth='user', type='http', methods=['GET'], csrf=False, cors='*')
-    def get_orders(self):
-        """
-        description : Retrieve all orders for the authenticated user that are in sent, sale, or done state.
-        parameters : None
-        """
-        try:
-            # Authenticate the user
-            user = user_auth(self)
-            if user['status'] == 'error':
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': user['message'],  # Assuming the message is already in Italian
-                        'info': 'Authentication failed.'  # English description
-                    }),
-                    content_type='application/json',
-                    status=401,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
-
-            user_id = user['user_id']
-
-            # Retrieve the partner associated with the user
-            partner = request.env['res.users'].browse(user_id).partner_id
-            if not partner:
-                return Response(json.dumps({
-                    'status': 'error',
-                    'message': 'Nessun partner trovato per l\'utente.',  # Error message in Italian
-                    'info': 'No partner found for the user.'  # English description
-                }), content_type='application/json', status=400, headers={'Access-Control-Allow-Origin': '*'})
-
-            # Search for the orders in sent, sale, or done state
-            orders = request.env['sale.order'].sudo().search([
-                ('partner_id', '=', partner.id),
-                ('state', 'in', ['sent', 'sale', 'done'])
-            ])
-
-            response_data = []
-            for order in orders:
-
-                # Retrieve the shipping address for the order
-                user_address = request.env['social_media.custom_address'].sudo().search([
-                    ('id', '=', order.shipping_address_id)
-                ])
-
-                shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
-                
-
-
-
-                # Prepare order data
-                order_data = {
-                    'id': order.id,
-                    'name': order.name,
-                    'state': order.state,
-                    'taxable_amount': order.amount_total,
+                    'taxable_amount': order.amount_untaxed,
                     'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
                     'partner_id': order.partner_id.id,
                     'partner_name': order.partner_id.name,
                     'partner_email': order.partner_id.email,
                     'partner_phone': order.partner_id.phone,
                     'partner_address': shipping_address,
-
-                    # I have set the VAT percentages to 0 as they are not provided in the scope.
-                    'vat_1_percentage': 0,
-                    'vat_2_percentage': 0,
-                    'shipping_charge': 450,
-                    'vat_1_value': 0,
-                    'vat_2_value': 0,
-                    'total_amount': order.amount_total + 450 + (order.amount_total * 0) + (order.amount_total * 0)
+                    'vat_1_percentage': vat_data['vat_1_percentage'],
+                    'vat_2_percentage': vat_data['vat_2_percentage'],
+                    'shipping_charge': 0,
+                    'vat_1_value': vat_data['vat_1_value'],
+                    'vat_2_value': vat_data['vat_2_value'],
+                    'total_amount': order.amount_total,
+                    'reward_points': order_reward_points,
+                    'all_products': []
                 }
+
+                for line in order.sudo().order_line:
+                    price = self._get_price_from_pricelist(line.product_id, partner_id, line.product_uom_qty)
+                    image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
+                    
+                    product_data = {
+                        'id': line.product_id.id,
+                        'name': line.product_id.name,
+                        'list_price': price * line.product_uom_qty,
+                        'active': line.product_id.active,
+                        'barcode': line.product_id.barcode,
+                        'color': line.product_id.color,
+                        'image': image_url,
+                        'quantity': line.product_uom_qty,
+                        'base_price': line.product_id.list_price,
+                        'discount': line.discount or 0,
+                        'order_id': line.order_id.id,
+                        'code': line.product_id.code_,
+                    }
+                    order_data['all_products'].append(product_data)
 
                 response_data.append(order_data)
 
-            final_response = {
-                'status': 'success',
-                'message': 'Ordini recuperati con successo.',  # Success message in Italian
-                'info': 'Orders retrieved successfully.',  # English description
-                'orders': response_data
-            }
-
-            # Success response
-            return Response(
-                json.dumps(final_response),
-                content_type='application/json',
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
+            return Response(json.dumps(response_data), content_type='application/json')
 
         except Exception as e:
-            # Error response
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'message': 'Si è verificato un errore durante il recupero degli ordini.',  # Error message in Italian
-                    'info': str(e)  # English error description
-                }),
-                content_type='application/json',
-                status=500,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-
-
-    @http.route('/api/confirm_order', auth='user', type='json', methods=['POST'])
-    def confirm_order(self, **post):
-        """
-        description : Confirm the user's order and empty the cart.
-        parameters : order_id (int)
-        """
-        if request.httprequest.method == 'OPTIONS':
-            headers = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-                'Access-Control-Max-Age': '86400',  # 24 hours
-            }
-            return Response(status=204, headers=headers)
-        
+            return Response(json.dumps({
+                'status': 'error',
+                'message': 'Si è verificato un errore durante il recupero dei dettagli dell\'ordine.',
+                'info': str(e)
+            }), content_type='application/json', status=500)
+     
+    @http.route('/api/orders', auth='public', type='http', methods=['GET'])
+    def get_orders(self):
         try:
-            # Authenticate the user
-            user = user_auth(self)
+            user = SocialMediaAuth.user_auth(self)
             if user['status'] == 'error':
-                return {
-                    'status': 'error',  
-                    'message': user['message'],  # Assuming the message is already in Italian
-                    'info': 'Authentication failed.'  # English description
-                }
-            
-            user_id = user['user_id']
-            order_id = request.jsonrequest.get('order_id')
+                return Response(json.dumps({
+                    'status': 'error', 
+                    'message': user['message'],
+                    'info': 'Authentication failed.'
+                }), content_type='application/json', status=401)
 
-            # Retrieve the partner associated with the user
-            partner = request.env['res.users'].browse(user_id).partner_id
-            if not partner:
-                return {
-                    'status': 'error',
-                    'message': 'Nessun partner trovato per l\'utente.',  # Error message in Italian
-                    'info': 'No partner found for the user.'  # English description
-                }
-            
-            # Search for the order
-            order = request.env['sale.order'].sudo().search([
-                    ('id', '=', order_id),
-                    ('partner_id', '=', partner.id),
-                    ('state', '=', 'draft')
-                ], limit=1)
-
-            if not order:
-                return {
-                    'status': 'error',
-                    'message': 'Ordine non trovato o già confermato.',  # Error message in Italian
-                    'info': 'Order not found or already confirmed.'  # English description
-                }, 404
-            
-            order_line = request.env['sale.order.line'].sudo().search([
-                ('order_id', '=', order.id)
+            partner_id = user['user_id']
+            orders = request.env['sale.order'].sudo().search([
+                ('partner_id', '=', partner_id),
+                ('state', 'in', ['sent', 'sale', 'done'])
             ])
 
-            if not order_line:
-                return {
-                    'status': 'error',
-                    'message': "L'ordine non contiene prodotti.",  # Error message in Italian
-                    'info': 'The order contains no products.'  # English description
-                }, 400
-
-            # Confirm the order
-            order.action_confirm()
-
-            # Retrieve the shipping address
-            user_address = request.env['social_media.custom_address'].sudo().search([
+            response_data = []
+            for order in orders:
+                user_address = request.env['social_media.custom_address'].sudo().search([
                     ('id', '=', order.shipping_address_id)
                 ])
+                shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+                vat_data = self._calculate_vat(order)
 
-            shipping_address =  f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+                order_data = {
+                    'id': order.id,
+                    'name': order.name,
+                    'state': order.state,
+                    'taxable_amount': order.amount_untaxed,
+                    'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                    'partner_id': order.partner_id.id,
+                    'partner_name': order.partner_id.name,
+                    'partner_email': order.partner_id.email,
+                    'partner_phone': order.partner_id.phone,
+                    'partner_address': shipping_address,
+                    'vat_1_percentage': vat_data['vat_1_percentage'],
+                    'vat_2_percentage': vat_data['vat_2_percentage'],
+                    'shipping_charge': 0,
+                    'vat_1_value': vat_data['vat_1_value'],
+                    'vat_2_value': vat_data['vat_2_value'],
+                    'total_amount': order.amount_total
+                }
+                response_data.append(order_data)
 
-            # Success response
+            return Response(json.dumps({
+                'status': 'success',
+                'message': 'Ordini recuperati con successo.',
+                'info': 'Orders retrieved successfully.',
+                'orders': response_data
+            }), content_type='application/json')
+
+        except Exception as e:
+            return Response(json.dumps({
+                'status': 'error',
+                'message': 'Si è verificato un errore durante il recupero degli ordini.',
+                'info': str(e)
+            }), content_type='application/json', status=500)
+
+
+
+    @http.route('/api/confirm_order', auth='public', type='json', methods=['POST'])
+    def confirm_order(self, **post):
+        try:
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
+
+            partner_id = user['user_id']
+            order_id = request.jsonrequest.get('order_id')
+
+            if not order_id:
+                return {'status': 'error', 'message': 'ID dell\'ordine non fornito.', 'info': 'Order ID is required.'}, 400
+
+            order = request.env['sale.order'].sudo().search([
+                ('id', '=', order_id),
+                ('partner_id', '=', partner_id),
+                ('state', '=', 'draft')
+            ], limit=1)
+
+            if not order:
+                return {'status': 'error', 'message': 'Ordine non trovato o già confermato.', 
+                    'info': 'Order not found or already confirmed.'}, 404
+
+            order_line = request.env['sale.order.line'].sudo().search([('order_id', '=', order.id)])
+            if not order_line:
+                return {'status': 'error', 'message': "L'ordine non contiene prodotti.", 
+                    'info': 'The order contains no products.'}, 400
+
+            # Update prices based on pricelist before confirming
+            for line in order_line:
+                price = self._get_price_from_pricelist(
+                    line.product_id, 
+                    partner_id,
+                    line.product_uom_qty
+                )
+                line.sudo().write({'price_unit': price})
+
+            order.sudo().action_confirm()
+
+            total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
+            if total_points > 0:
+                request.env['rewards.points'].sudo().create({
+                    'user_id': partner_id,
+                    'order_id': order.id,
+                    'points': total_points,
+                    'status': 'gain'
+                })
+
+                total_points_obj = request.env['rewards.totalpoints'].sudo().search([
+                    ('user_id', '=', partner_id)
+                ], limit=1)
+                
+                if total_points_obj:
+                    total_points_obj.sudo().write({
+                        'total_points': total_points_obj.total_points + total_points
+                    })
+                else:
+                    request.env['rewards.totalpoints'].sudo().create({
+                        'user_id': partner_id,
+                        'total_points': total_points
+                    })
+
+            user_address = request.env['social_media.custom_address'].sudo().search([
+                ('id', '=', order.shipping_address_id)
+            ])
+
+            shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+
             return {
                 'status': 'success',
-                'message': 'Ordine confermato con successo e carrello svuotato.',  # Success message in Italian
-                'info': 'Order confirmed successfully and cart emptied.',  # English description
+                'message': 'Ordine confermato con successo e carrello svuotato.',
+                'info': 'Order confirmed successfully and cart emptied.',
                 'order_id': order.id,
                 'order_state': order.state,
                 'order_amount_total': order.amount_total,
-                'order_date_order': order.date_order,
-                'partner_address': shipping_address
+                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                'partner_address': shipping_address,
+                'reward_points_earned': total_points if total_points > 0 else 0
             }
 
         except Exception as e:
-            # Error response
-            return {
-                'status': 'error',
-                'message': 'Si è verificato un errore durante la conferma dell\'ordine.',  # Error message in Italian
-                'info': str(e)  # English error description
-            }, 500
-        
-        
-    @http.route('/api/reorder', auth='user', type='json', methods=['POST'])
+            return {'status': 'error', 'message': 'Si è verificato un errore durante la conferma dell\'ordine.',
+                    'info': str(e)}, 500
+
+    @http.route('/api/reorder', auth='public', type='json', methods=['POST'])
     def reorder(self):
-        """
-        description : Reorder a previously confirmed order.
-        parameters : order_id (int)
-        """
         try:
-            # Authenticate the user
-            user = user_auth(self)
+            user = SocialMediaAuth.user_auth(self)
             if user['status'] == 'error':
-                return {
-                    'status': 'error',
-                    'message': user['message'],  # Assuming the message is already in Italian
-                    'info': 'Authentication failed.'  # English description
-                }
-            
-            user_id = user['user_id']
+                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
+
+            partner_id = user['user_id']
             order_id = request.jsonrequest.get('order_id')
 
-            # Retrieve the partner associated with the user
-            partner = request.env['res.users'].browse(user_id).partner_id
-            if not partner:
-                return {
-                    'status': 'error',
-                    'message': "Nessun partner trovato per l'utente.",  # Error message in Italian
-                    'info': 'No partner found for the user.'  # English description
-                }
-            
-            # Search for the order
             order = request.env['sale.order'].sudo().search([
-                    ('id', '=', order_id),
-                    ('partner_id', '=', partner.id),
-                    ('state', 'in', ['sent', 'sale', 'done'])
-                ], limit=1)
+                ('id', '=', order_id),
+                ('partner_id', '=', partner_id), 
+                ('state', 'in', ['sent', 'sale', 'done'])
+            ], limit=1)
 
             if not order:
-                return {
-                    'status': 'error',
-                    'message': 'Ordine non trovato o non può essere riordinato.',  # Error message in Italian
-                    'info': 'Order not found or cannot be reordered.'  # English description
-                }, 404
-            
-            # Create a new order from the existing one
-            new_order = order.copy()
-            new_order.action_confirm()
+                return {'status': 'error', 'message': 'Ordine non trovato o non può essere riordinato.',
+                    'info': 'Order not found or cannot be reordered.'}, 404
 
-            # Check if the order has reward points
+            new_order = order.sudo().copy()
+            
+            # Update prices based on current pricelist
+            for line in new_order.order_line:
+                price = self._get_price_from_pricelist(
+                    line.product_id,
+                    partner_id,
+                    line.product_uom_qty
+                )
+                line.sudo().write({'price_unit': price})
+
+            new_order.sudo().action_confirm()
+
             order_reward_points = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)]).points
             if order_reward_points:
                 request.env['rewards.points'].sudo().create({
                     'points': order_reward_points,
-                    'user_id': user_id,
+                    'user_id': partner_id,
                     'order_id': new_order.id,
-                    'status': 'gain'
+                    'status': 'gain' 
                 })
 
-                # Update the total points
-                total_points_obj = request.env['rewards.totalpoints'].sudo().search([('user_id', '=', user_id)])
+                total_points_obj = request.env['rewards.totalpoints'].sudo().search([('user_id', '=', partner_id)])
                 if total_points_obj:
-                    total_points = total_points_obj.total_points + order_reward_points
-                    total_points_obj.write({'total_points': total_points})
+                    total_points_obj.sudo().write({
+                        'total_points': total_points_obj.total_points + order_reward_points
+                    })
 
-            # Retrieve the shipping address
             user_address = request.env['social_media.custom_address'].sudo().search([
-                    ('id', '=', new_order.shipping_address_id)
-                ])
+                ('id', '=', new_order.shipping_address_id)
+            ])
 
             shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
-            # Success response
             return {
                 'status': 'success',
-                'message': 'Ordine riordinato con successo.',  # Success message in Italian
-                'info': 'Order successfully reordered.',  # English description
+                'message': 'Ordine riordinato con successo.',
+                'info': 'Order successfully reordered.',
                 'order_id': new_order.id,
-                'order_state': new_order.state,
+                'order_state': new_order.state, 
                 'order_amount_total': new_order.amount_total,
-                'order_date_order': new_order.date_order,
+                'order_date_order': new_order.date_order.strftime('%Y-%m-%d %H:%M:%S') if new_order.date_order else None,
                 'order_reward_points': order_reward_points,
                 'partner_address': shipping_address
             }
 
         except Exception as e:
-            # Error response
-            return {
-                'status': 'error',
-                'message': 'Si è verificato un errore durante il riordino.',  # Error message in Italian
-                'info': str(e)  # English error description
-            }, 500
+            return {'status': 'error', 'message': 'Si è verificato un errore durante il riordino.',
+                    'info': str(e)}, 500
 
-
-    
-    @http.route('/api/cancel_order', auth='user', type='json', methods=['POST'], csrf=False)
+    @http.route('/api/cancel_order', auth='public', type='json', methods=['POST'], csrf=False)
     def cancel_order(self, **post):
-        """
-        description : Cancel a specific order for the authenticated user.
-        parameters : order_id (int)
-        """
-        if request.httprequest.method == 'OPTIONS':
-            headers = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-                'Access-Control-Max-Age': '86400',  # 24 hours
-            }
-            return Response(status=204, headers=headers)
-        
         try:
-            # Authenticate the user
-            user = user_auth(self)
+            user = SocialMediaAuth.user_auth(self)
             if user['status'] == 'error':
-                return {
-                    'status': 'error',
-                    'message': user['message'],  # Assuming the message is already in Italian
-                    'info': 'Authentication failed.'  # English description
-                }
+                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
 
-            user_id = user['user_id']
+            partner_id = user['user_id']
             order_id = request.jsonrequest.get('order_id')
 
-            # Retrieve the partner associated with the user
-            partner = request.env['res.users'].browse(user_id).partner_id
-            if not partner:
-                return {
-                    'status': 'error',
-                    'message': 'Nessun partner trovato per l\'utente.',  # Error message in Italian
-                    'info': 'No partner found for the user.'  # English description
-                }
+            if not order_id:
+                return {'status': 'error', 'message': 'ID dell\'ordine non fornito.',
+                    'info': 'Order ID is required.'}, 400
 
-            # Search for the order
             order = request.env['sale.order'].sudo().search([
-                    ('id', '=', order_id),
-                    ('partner_id', '=', partner.id),
-                    ('state', '!=', 'draft')
-                ], limit=1)
+                ('id', '=', order_id),
+                ('partner_id', '=', partner_id),
+                ('state', '!=', 'draft')
+            ], limit=1)
 
             if not order:
-                return {
-                    'status': 'error',
-                    'message': 'Ordine non trovato o già confermato.',  # Error message in Italian
-                    'info': 'Order not found or already confirmed.'  # English description
-                }, 404
+                return {'status': 'error', 'message': 'Ordine non trovato o già confermato.',
+                    'info': 'Order not found or already confirmed.'}, 404
 
-            # Check if the order has any products
-            order_line = request.env['sale.order.line'].search([
-                ('order_id', '=', order.id)
+            order_line = request.env['sale.order.line'].sudo().search([('order_id', '=', order.id)])
+            if not order_line:
+                return {'status': 'error', 'message': 'L\'ordine non contiene prodotti.',
+                    'info': 'Order has no products.'}, 400
+
+            reward_points = request.env['rewards.points'].sudo().search([
+                ('order_id', '=', order.id),
+                ('user_id', '=', partner_id),
+                ('status', '=', 'gain')
             ])
 
-            if not order_line:
-                return {
-                    'status': 'error',
-                    'message': 'L\'ordine non contiene prodotti.',  # Error message in Italian
-                    'info': 'Order has no products.'  # English description
-                }, 400
+            if reward_points:
+                total_points_obj = request.env['rewards.totalpoints'].sudo().search([
+                    ('user_id', '=', partner_id)
+                ], limit=1)
 
-            # Cancel the order
-            order.action_cancel()
+                if total_points_obj and total_points_obj.total_points >= reward_points.points:
+                    total_points_obj.sudo().write({
+                        'total_points': total_points_obj.total_points - reward_points.points
+                    })
+                    reward_points.sudo().unlink()
 
-            # Success response
+            order.sudo().action_cancel()
+
             return {
                 'status': 'success',
-                'message': 'Ordine annullato con successo.',  # Success message in Italian
-                'info': 'Order cancelled successfully.',  # English description
+                'message': 'Ordine annullato con successo.',
+                'info': 'Order cancelled successfully.',
                 'order_id': order.id,
                 'order_state': order.state,
                 'order_amount_total': order.amount_total,
-                'order_date_order': order.date_order,
+                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                'points_deducted': reward_points.points if reward_points else 0
             }
 
         except Exception as e:
-            # Error response
-            return {
-                'status': 'error',
-                'message': 'Si è verificato un errore durante l\'annullamento dell\'ordine.',  # Error message in Italian
-                'info': str(e)  # English error description
-            }, 500
+            return {'status': 'error', 'message': 'Si è verificato un errore durante l\'annullamento dell\'ordine.',
+                    'info': str(e)}, 500
 
-        
-    @http.route('/api/delete_order/<int:order_id>', auth='user', type='http', methods=['DELETE'], csrf=False)
-    def delete_order(self, order_id):
-        """
-        description : Delete a specific order if it's in draft or canceled state.
-        parameters : order_id (int)
-        """
-        try:
-            # Authenticate the user
-            user = user_auth(self)
-            if user['status'] == 'error':
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': user['message'],  # Assuming the message is already in Italian
-                        'info': 'Authentication failed.'  # English description
-                    }),
-                    content_type='application/json',
-                    status=401,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
-
-            user_id = user['user_id']
-
-            # Retrieve the partner associated with the user
-            partner = request.env['res.users'].browse(user_id).partner_id
-            if not partner:
-                return Response(json.dumps({
-                    'status': 'error',
-                    'message': 'Nessun partner trovato per l\'utente.',  # Error message in Italian
-                    'info': 'No partner found for the user.'  # English description
-                }), content_type='application/json', status=400, headers={'Access-Control-Allow-Origin': '*'})
-
-            # Search for the order
-            order = request.env['sale.order'].sudo().search([
-                    ('id', '=', order_id),
-                    ('partner_id', '=', partner.id),
-                    ('state', 'in', ['draft', 'cancel'])
-                ], limit=1)
-
-            if not order:
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': 'Ordine non trovato o non può essere eliminato.',  # Error message in Italian
-                        'info': 'Order not found or cannot be deleted.'  # English description
-                    }),
-                    content_type='application/json',
-                    status=404,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
-
-            # Delete the order
-            order.unlink()
-
-            return Response(
-                json.dumps({
-                    'status': 'success',
-                    'message': 'Ordine eliminato con successo.',  # Success message in Italian
-                    'info': 'Order deleted successfully.'  # English description
-                }),
-                content_type='application/json',
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-        except Exception as e:
-            # Error response
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'message': 'Si è verificato un errore durante l\'eliminazione dell\'ordine.',  # Error message in Italian
-                    'info': str(e)  # English error description
-                }),
-                content_type='application/json',
-                status=500,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-
-
-    @http.route('/api/create_invoice', auth='user', type='json', methods=['POST'])
-    def create_invoice(self, **post):
-        """
-        description : Create an invoice for a confirmed order and send it via email.
-        parameters : order_id (int)
-        """
-        if request.httprequest.method == 'OPTIONS':
-            headers = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-                'Access-Control-Max-Age': '86400',  # 24 hours
-            }
-            return Response(status=204, headers=headers)
-        
-        try:
-            # Authenticate the user
-            user = user_auth(self)
-            if user['status'] == 'error':
-                return {
-                    'status': 'error',
-                    'message': user['message'],  # Assuming the message is already in Italian
-                    'info': 'Authentication failed.'  # English description
-                }
-
-            user_id = user['user_id']
-            order_id = request.jsonrequest.get('order_id')
-
-            # Retrieve the partner associated with the user
-            partner = request.env['res.users'].browse(user_id).partner_id
-            if not partner:
-                return Response(json.dumps({
-                    'status': 'error',
-                    'message': 'Nessun partner trovato per l\'utente.',  # Error message in Italian
-                    'info': 'No partner found for the user.'  # English description
-                }), content_type='application/json', status=400, headers={'Access-Control-Allow-Origin': '*'})
-
-            # Search for the order
-            order = request.env['sale.order'].sudo().search([
-                    ('id', '=', order_id),
-                    ('partner_id', '=', partner.id),
-                    ('state', '=', 'sale')
-                ], limit=1)
-
-            if not order:
-                return {
-                    'status': 'error',
-                    'message': 'Ordine non trovato o non confermato.',  # Error message in Italian
-                    'info': 'Order not found or not confirmed.'  # English description
-                }, 404
-
-            # Create the invoice
-            invoice = order._create_invoices()
-
-            # Send the invoice email
-            mail_values = {
-                'subject': 'Fattura per Ordine %s' % order.name,  # Italian subject
-                'email_to': partner.email,
-                'body_html': 'Trova in allegato la fattura per il tuo ordine.',  # Italian email body
-                'email_from': request.env.user.email or 'admin@gmail.com'
-            }
-
-            mail = request.env['mail.mail'].create(mail_values)
-            mail.send()
-
-            # Success response
-            return {
-                'status': 'success',
-                'message': 'Fattura creata e inviata con successo.',  # Success message in Italian
-                'info': 'Invoice created and sent successfully.',  # English description
-                'invoice_id': invoice.id,
-                'invoice_state': invoice.state,
-                'invoice_amount_total': invoice.amount_total,
-                'invoice_date_invoice': invoice.date_invoice,
-            }
-
-        except Exception as e:
-            # Error response
-            return {
-                'status': 'error',
-                'message': 'Si è verificato un errore durante la creazione della fattura.',  # Error message in Italian
-                'info': str(e)  # English error description
-            }, 500
-        
     

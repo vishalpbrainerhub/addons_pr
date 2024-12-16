@@ -13,7 +13,7 @@ class OrderExportCron(models.Model):
     def _export_orders(self):
         try:
             # ftp_path = 'root/primapaint'
-            out_dir = '/Out'
+            out_dir = '/var/lib/odoo/Out'
             os.makedirs(out_dir, exist_ok=True)
             filename = f'{out_dir}/orders_export.csv'
 

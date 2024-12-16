@@ -47,7 +47,7 @@ class SocialMediaAuth(http.Controller):
                 "message": "Invalid authorization header format."
             }
 
-        secret_key = os.getenv("JWT_SECRET_KEY")
+        secret_key = 'testing'
 
         try:
             # Decode the JWT token to extract customer information

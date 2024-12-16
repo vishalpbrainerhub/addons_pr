@@ -55,7 +55,7 @@ class Users(http.Controller):
             }
 
             # Fix for JWT secret key
-            secret_key = os.getenv("JWT_SECRET_KEY")
+            secret_key = 'testing'
             if not secret_key:
                 return {
                     "status": "error",

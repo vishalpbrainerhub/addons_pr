@@ -1,154 +1,124 @@
-import csv
-import os
-from datetime import datetime
 from odoo import models, fields, api
+import csv
 import logging
+import os
+from contextlib import contextmanager
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
-class CustomerImportCron(models.Model):
-    _name = 'customer.import.cron'
-    _description = 'Customer Import Cron Job'
+class CustomerImport(models.Model):
+    _name = 'customer.import'
+    _description = 'Customer Import Model'
 
-    def _import_customers(self):
-        try:
-            file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'In', 'customers_2_12_2024_8_34.csv')
-            _logger.info(f"Attempting to read file from: {file_path}")
-            
-            if not os.path.exists(file_path):
-                _logger.error(f"File not found at path: {file_path}")
-                return
+    name = fields.Char(string='Import Name')
+    last_import_date = fields.Datetime(string='Last Import Date')
+    import_count = fields.Integer(string='Import Count', default=0)
 
-            Partner = self.env['res.partner'].sudo()
-            count = 0
-            
-            with open(file_path, 'r', encoding='utf-8') as csvfile:
-                content = csvfile.readlines()
-                _logger.info(f"Found {len(content)} lines in customer file")
+    @contextmanager
+    def _get_new_env(self):
+        with api.Environment.manage():
+            with self.pool.cursor() as new_cr:
+                yield api.Environment(new_cr, self.env.uid, self.env.context)
+
+    def _process_batch(self, batch, env):
+        success_count = 0
+        for row in batch:
+            if not row[0].isdigit():
+                continue
                 
-                for line in content[1:]:  # Skip header
-                    line = line.strip()
-                    if not line:
-                        continue
+            try:
+                partner_id = int(row[0])
+                
+                env.cr.execute("""
+                    SELECT id FROM res_partner 
+                    WHERE id = %s
+                    FOR UPDATE SKIP LOCKED
+                """, (partner_id,))
+                
+                if env.cr.fetchone():
+                    continue
 
-                    parts = line.split('\t')
-                    if len(parts) < 5:
-                        _logger.warning(f"Invalid line format: {line}")
-                        continue
+                partner_vals = {
+                    'id': partner_id,
+                    'name': row[1],
+                    'vat': False if row[2] == 'False' else row[2],
+                    'l10n_it_codice_fiscale': False if row[3] == 'False' else row[3],
+                    'company_type': 'company',
+                    'country_id': env.ref('base.it').id,
+                }
 
+                if len(row) > 4 and '(' in row[4]:
                     try:
-                        record_id = parts[0].strip('"').split(',')[0]
-                        name = parts[0].strip('"').split(',')[-1].strip()
-                        
-                        vals = {
-                            'name': name,
-                            'vat': parts[1].strip('"') if parts[1] != 'False' else False,
-                            'l10n_it_codice_fiscale': parts[2].strip('"') if parts[2] != 'False' else False,
-                            'customer_rank': 1,
-                            'company_type': 'company'
-                        }
+                        pricelist_id = int(row[4].split(',')[0].strip('( )'))
+                        partner_vals['property_product_pricelist'] = pricelist_id
+                    except (ValueError, IndexError):
+                        pass
 
-                        if parts[4] != 'False':
-                            pricelist_data = eval(parts[4].strip())
-                            vals['property_product_pricelist'] = pricelist_data[0]
+                env['res.partner'].with_context(tracking_disable=True).create(partner_vals)
+                success_count += 1
+                _logger.info(f"Imported partner ID: {partner_id}")
 
-                        self.env.cr.execute("SELECT id FROM res_partner WHERE id = %s", (int(record_id),))
-                        exists = self.env.cr.fetchone()
-                        
-                        if exists:
-                            Partner.browse(int(record_id)).write(vals)
-                        else:
-                            Partner.create(vals)
-                        
-                        self.env.cr.commit()
-                        count += 1
-                        _logger.info(f"Processed customer: {name} (ID: {record_id})")
+            except Exception as e:
+                _logger.error(f"Error processing partner {row[0]}: {str(e)}")
+                continue
+                
+        return success_count
+
+    def import_customers(self):
+        BATCH_SIZE = 50
+        # file path to import
+        file_path = ''
+        total_success = 0
+        
+        if not os.path.exists(file_path):
+            raise UserError(f"Import file not found: {file_path}")
+
+        try:
+            with open(file_path, 'r') as file:
+                next(file)
+                csv_reader = csv.reader(file, delimiter=',', quotechar='"')
+                current_batch = []
+                
+                for row in csv_reader:
+                    current_batch.append(row)
                     
-                    except Exception as e:
-                        self.env.cr.rollback()
-                        _logger.error(f"Error processing line: {line}\nError: {str(e)}")
+                    if len(current_batch) >= BATCH_SIZE:
+                        with self._get_new_env() as new_env:
+                            batch_success = self._process_batch(current_batch, new_env)
+                            new_env.cr.commit()
+                            total_success += batch_success
+                        current_batch = []
 
-            _logger.info(f"Successfully imported {count} customers")
-        except Exception as e:
-            self.env.cr.rollback()
-            _logger.error(f"Customer import error: {str(e)}")
+                if current_batch:
+                    with self._get_new_env() as new_env:
+                        batch_success = self._process_batch(current_batch, new_env)
+                        new_env.cr.commit()
+                        total_success += batch_success
 
-class ProductImportCron(models.Model):
-    _name = 'product.import.cron'
-    _description = 'Product Import Cron Job'
-
-    def _import_products(self):
-        try:
-            file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'In', 'product_2_12_2024_8_34.csv')
-            _logger.info(f"Attempting to read file from: {file_path}")
+            with self._get_new_env() as final_env:
+                import_record = final_env[self._name].browse(self.id)
+                import_record.write({
+                    'last_import_date': fields.Datetime.now(),
+                    'import_count': total_success
+                })
+                final_env.cr.commit()
             
-            if not os.path.exists(file_path):
-                _logger.error(f"File not found at path: {file_path}")
-                return
-
-            Product = self.env['product.template'].sudo()
-            count = 0
-            
-            with open(file_path, 'r', encoding='utf-8') as csvfile:
-                content = csvfile.readlines()
-                _logger.info(f"Found {len(content)} lines in product file")
-                
-                for line in content[1:]:
-                    line = line.strip()
-                    if not line:
-                        continue
-
-                    parts = line.split('\t')
-                    if len(parts) < 6:
-                        _logger.warning(f"Invalid line format: {line}")
-                        continue
-
-                    try:
-                        record_id = parts[0].strip('"').split(',')[0]
-                        name = parts[0].strip('"').split(',')[-1].strip()
-
-                        vals = {
-                            'name': name,
-                            'type': 'product',  # Changed from 'consu'
-                            'detailed_type': 'product',  # Changed from 'consu'
-                            'sale_ok': parts[4].strip() == 'True',
-                            'purchase_ok': parts[5].strip() == 'True',
-                            'uom_id': 1,
-                            'uom_po_id': 1,
-                            'lst_price': 1.0,
-                            'active': True
-                        }
-
-                        if parts[3]:
-                            categ_data = eval(parts[3].strip())
-                            vals['categ_id'] = categ_data[0]
-
-                        self.env.cr.execute("SELECT id FROM product_template WHERE id = %s", (int(record_id),))
-                        exists = self.env.cr.fetchone()
-                        
-                        if exists:
-                            Product.browse(int(record_id)).write(vals)
-                        else:
-                            Product.create(vals)
-                            
-                        self.env.cr.commit()
-                        count += 1
-                        _logger.info(f"Processed product: {name} (ID: {record_id})")
-                        
-                    except Exception as e:
-                        self.env.cr.rollback()
-                        _logger.error(f"Error processing line: {line}\nError: {str(e)}")
-
-            _logger.info(f"Successfully imported {count} products")
         except Exception as e:
-            self.env.cr.rollback()
-            _logger.error(f"Product import error: {str(e)}")
+            _logger.error(f"Import error: {str(e)}")
+            raise UserError(str(e))
 
-class DataImportScheduler(models.Model):
-    _name = 'data.import.scheduler'
-    _description = 'Data Import Scheduler'
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Import Complete',
+                'message': f'Successfully imported: {total_success}',
+                'type': 'success',
+            }
+        }
 
     @api.model
-    def run_imports(self):
-        self.env['customer.import.cron']._import_customers()
-        self.env['product.import.cron']._import_products()
+    def _run_import_cron(self):
+        import_record = self.search([], limit=1) or self.create({'name': 'Auto Import'})
+        return import_record.import_customers()

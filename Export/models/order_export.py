@@ -4,6 +4,7 @@ from datetime import datetime
 from odoo import models, fields, api
 import logging
 
+
 _logger = logging.getLogger(__name__)
 
 class OrderExportCron(models.Model):
@@ -13,7 +14,7 @@ class OrderExportCron(models.Model):
     def _export_orders(self):
         try:
             # ftp_path = 'root/primapaint'
-            out_dir = '/var/lib/odoo/Out'
+            out_dir = 'Out'
             os.makedirs(out_dir, exist_ok=True)
             filename = f'{out_dir}/orders_export.csv'
 

@@ -6,12 +6,13 @@
     "description": "This module enables a Export Service.",
 
     "category": "Customer Loyalty",
-    "depends": ["base", "product", "sale"],
+    "depends": ["base", "product", "sale",'contacts'],
     "data": [
         "security/ir.model.access.csv",
-        "data/customer_export.xml",
+        "data/import_data.xml",
+        "views/import_views.xml",
         "data/order_export.xml",
-        # "data/cron_data.xml",
+        "data/product_data_import.xml",
     ],
     "demo": [],
     "installable": True,

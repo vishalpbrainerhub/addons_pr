@@ -28,3 +28,12 @@ venv/
 
 zz.txt
 .gitignore
+
+
+
+
+
+Host: your-server-ip
+Username: ftpuser_primapaint
+Password: ftppass_primapaint
+Port: 21

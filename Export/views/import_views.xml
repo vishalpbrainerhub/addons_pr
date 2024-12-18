@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree View -->
+    <record id="view_customer_import_tree" model="ir.ui.view">
+        <field name="name">customer.import.tree</field>
+        <field name="model">customer.import</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="last_import_date"/>
+                <field name="import_count"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_customer_import_form" model="ir.ui.view">
+        <field name="name">customer.import.form</field>
+        <field name="model">customer.import</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="import_customers" string="Import Customers" type="object" class="oe_highlight"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="last_import_date"/>
+                        <field name="import_count"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_customer_import" model="ir.actions.act_window">
+        <field name="name">Customer Import</field>
+        <field name="res_model">customer.import</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Menu -->
+    <menuitem id="menu_import_root" name="Data Import" sequence="10"/>
+    <menuitem id="menu_customer_import" name="Customer Import" parent="menu_import_root" action="action_customer_import" sequence="1"/>
+</odoo>

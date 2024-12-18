@@ -2,6 +2,7 @@
     "name": "Export Service",
     "version": "1.0",
     "summary": "Export Service",
+    "license": "LGPL-3",
     "sequence": 10,
     "description": "This module enables a Export Service.",
 

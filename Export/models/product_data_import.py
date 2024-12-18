@@ -50,7 +50,7 @@ class ProductImport(models.Model):
         return 0
 
     def import_products(self):
-        file_path = '/var/lib/odoo/export_data/In/customer-data.csv'
+        file_path = '/var/lib/odoo/export_data/In/product-data.csv'
         if not os.path.exists(file_path):
             raise UserError("Product import file not found")
 

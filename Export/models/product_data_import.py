@@ -50,7 +50,7 @@ class ProductImport(models.Model):
         return 0
 
     def import_products(self):
-        file_path = ''
+        file_path = '/home/ftpuser/export_data/In/customer-data.csv'
         if not os.path.exists(file_path):
             raise UserError("Product import file not found")
 

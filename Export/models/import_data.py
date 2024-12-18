@@ -57,7 +57,8 @@ class PartnerImport(models.Model):
     def import_partners(self):
         file_path = '/var/lib/odoo/export_data/In/customer-data.csv'
         if not os.path.exists(file_path):
-            raise UserError("Partner import file not found")
+            _logger.error(f"File not found at {file_path}")
+            raise UserError(f"Partner import file not found. Please ensure file exists in {file_path}")
 
         total_success = 0
         try:

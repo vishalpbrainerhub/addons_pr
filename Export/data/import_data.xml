@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <data noupdate="1">
-        <record id="ir_cron_import_customers" model="ir.cron">
-            <field name="name">Import Customers</field>
-            <field name="model_id" ref="model_customer_import"/>
-            <field name="state">code</field>
-            <field name="code">model._run_import_cron()</field>
-            <field name="interval_number">1</field>
-            <field name="interval_type">minutes</field>
-            <field name="numbercall">-1</field>
-            <field name="doall" eval="False"/>
-            <field name="active" eval="True"/>
-        </record>
-    </data>
+    <record id="ir_cron_import_partners" model="ir.cron">
+    <field name="name">Import Partners from CSV</field>
+    <field name="model_id" ref="model_partner_import"/>
+    <field name="state">code</field>
+    <field name="code">model._run_import_cron()</field>
+    <field name="interval_number">1</field>
+    <field name="interval_type">minutes</field>
+    <field name="numbercall">-1</field>
+    <field name="doall" eval="False"/>
+    <field name="active" eval="True"/>
+</record>
 </odoo>

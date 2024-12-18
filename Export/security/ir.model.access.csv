@@ -1,4 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_customer_import_user,customer.import.user,model_customer_import,base.group_user,1,1,1,1
 access_order_export_cron,Order Export Cron Access,model_order_export_cron,base.group_user,1,1,1,1
+access_partner_import_user,partner.import.user,model_partner_import,base.group_user,1,1,1,1
 access_product_import,product.import.user,model_product_import,base.group_user,1,1,1,1

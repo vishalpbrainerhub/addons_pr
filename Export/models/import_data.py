@@ -7,118 +7,97 @@ from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
-class CustomerImport(models.Model):
-    _name = 'customer.import'
-    _description = 'Customer Import Model'
+class PartnerImport(models.Model):
+    _name = 'partner.import'
+    _description = 'Partner Import'
 
     name = fields.Char(string='Import Name')
-    last_import_date = fields.Datetime(string='Last Import Date')
-    import_count = fields.Integer(string='Import Count', default=0)
+    last_import_date = fields.Datetime()
+    import_count = fields.Integer(default=0)
 
     @contextmanager
     def _get_new_env(self):
-        with api.Environment.manage():
-            with self.pool.cursor() as new_cr:
-                yield api.Environment(new_cr, self.env.uid, self.env.context)
+        with self.pool.cursor() as new_cr:
+            yield api.Environment(new_cr, self.env.uid, self.env.context)
 
-    def _process_batch(self, batch, env):
-        success_count = 0
+    def _get_country_id(self, env, country_name):
+        return env['res.country'].search([('name', '=', country_name)], limit=1).id
+
+    def _process_batch(self, env, batch):
+        partners = []
+        existing_ids = set(env['res.partner'].search([]).ids)
+        
         for row in batch:
-            if not row[0].isdigit():
-                continue
-                
             try:
-                partner_id = int(row[0])
-                
-                env.cr.execute("""
-                    SELECT id FROM res_partner 
-                    WHERE id = %s
-                    FOR UPDATE SKIP LOCKED
-                """, (partner_id,))
-                
-                if env.cr.fetchone():
+                partner_id = int(row['id'])
+                if partner_id in existing_ids:
+                    _logger.info(f"Skipping existing partner ID: {partner_id}")
                     continue
-
+                    
                 partner_vals = {
                     'id': partner_id,
-                    'name': row[1],
-                    'vat': False if row[2] == 'False' else row[2],
-                    'l10n_it_codice_fiscale': False if row[3] == 'False' else row[3],
-                    'company_type': 'company',
-                    'country_id': env.ref('base.it').id,
+                    'name': row['name'],
+                    'email': row['email'],
+                    'vat': row['vat'],
+                    'street': row['street'],
+                    'city': row['city'],
+                    'zip': row['zip'],
+                    'country_id': self._get_country_id(env, row['country_id'])
                 }
-
-                if len(row) > 4 and '(' in row[4]:
-                    try:
-                        pricelist_id = int(row[4].split(',')[0].strip('( )'))
-                        partner_vals['property_product_pricelist'] = pricelist_id
-                    except (ValueError, IndexError):
-                        pass
-
-                env['res.partner'].with_context(tracking_disable=True).create(partner_vals)
-                success_count += 1
-                _logger.info(f"Imported partner ID: {partner_id}")
-
+                partners.append(partner_vals)
             except Exception as e:
-                _logger.error(f"Error processing partner {row[0]}: {str(e)}")
+                _logger.error(f"Error processing partner: {str(e)}")
                 continue
-                
-        return success_count
 
-    def import_customers(self):
-        BATCH_SIZE = 50
-        # file path to import
+        if partners:
+            env['res.partner'].with_context(tracking_disable=True).create(partners)
+            return len(partners)
+        return 0
+
+    def import_partners(self):
         file_path = ''
-        total_success = 0
-        
         if not os.path.exists(file_path):
-            raise UserError(f"Import file not found: {file_path}")
+            raise UserError("Partner import file not found")
 
+        total_success = 0
         try:
-            with open(file_path, 'r') as file:
-                next(file)
-                csv_reader = csv.reader(file, delimiter=',', quotechar='"')
-                current_batch = []
+            with open(file_path, 'r', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                batch = []
                 
-                for row in csv_reader:
-                    current_batch.append(row)
-                    
-                    if len(current_batch) >= BATCH_SIZE:
+                for row in reader:
+                    batch.append(row)
+                    if len(batch) >= 5:
                         with self._get_new_env() as new_env:
-                            batch_success = self._process_batch(current_batch, new_env)
+                            success = self._process_batch(new_env, batch)
+                            total_success += success
                             new_env.cr.commit()
-                            total_success += batch_success
-                        current_batch = []
+                        batch = []
 
-                if current_batch:
+                if batch:
                     with self._get_new_env() as new_env:
-                        batch_success = self._process_batch(current_batch, new_env)
+                        success = self._process_batch(new_env, batch)
+                        total_success += success
                         new_env.cr.commit()
-                        total_success += batch_success
 
-            with self._get_new_env() as final_env:
-                import_record = final_env[self._name].browse(self.id)
-                import_record.write({
-                    'last_import_date': fields.Datetime.now(),
-                    'import_count': total_success
-                })
-                final_env.cr.commit()
+            self.write({
+                'last_import_date': fields.Datetime.now(),
+                'import_count': total_success
+            })
             
-        except Exception as e:
-            _logger.error(f"Import error: {str(e)}")
-            raise UserError(str(e))
-
-        return {
-            'type': 'ir.actions.client',
-            'tag': 'display_notification',
-            'params': {
-                'title': 'Import Complete',
-                'message': f'Successfully imported: {total_success}',
-                'type': 'success',
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Partner Import Complete',
+                    'message': f"Imported {total_success} partners",
+                    'type': 'success',
+                }
             }
-        }
+        except Exception as e:
+            raise UserError(str(e))
 
     @api.model
     def _run_import_cron(self):
-        import_record = self.search([], limit=1) or self.create({'name': 'Auto Import'})
-        return import_record.import_customers()
+        import_record = self.search([], limit=1) or self.create({'name': 'Auto Import Partners'})
+        return import_record.import_partners()

@@ -37,3 +37,11 @@ Host: your-server-ip
 Username: ftpuser_primapaint
 Password: ftppass_primapaint
 Port: 21
+
+
+
+ls - list files and directories
+cd directory - change to a directory
+get file - download a file
+put file - upload a file
+quit - exit the SFTP session

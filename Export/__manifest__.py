@@ -13,6 +13,7 @@
         "data/import_data.xml",
         "data/order_export.xml",
         "data/product_data_import.xml",
+        "data/pricelist_import.xml",
     ],
     "demo": [],
     "installable": True,

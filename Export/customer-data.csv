@@ -1,6 +1,0 @@
-id,name,email,vat,street,city,zip,country_id
-1,John Doe,john.doe@example.com,BE0477472701,123 Main Street,Brussels,1000,Belgium
-2,Tech Solutions Inc,contact@techsolutions.com,US123456789,456 Tech Avenue,New York,10001,United States
-3,Global Trade Ltd,info@globaltrade.co.uk,GB123456782,789 Commerce Road,London,EC1A 1BB,United Kingdom
-4,Maria Garcia,maria.g@empresa.es,ES12345678Z,Calle Principal 45,Madrid,28001,Spain
-5,Acme Corporation,info@acme.com,DE123456788,987 Industrial Park,Berlin,10115,Germany

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="ir_cron_import_products" model="ir.cron">
-        <field name="name">Import Products from CSV</field>
-        <field name="model_id" ref="model_product_import"/>
+    <record id="ir_cron_import_pricelists" model="ir.cron">
+        <field name="name">Import Pricelists from CSV</field>
+        <field name="model_id" ref="model_pricelist_import"/>
         <field name="state">code</field>
         <field name="code">model._run_import_cron()</field>
         <field name="interval_number">1</field>

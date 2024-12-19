@@ -375,7 +375,7 @@ class UsersAuthApi(http.Controller):
         user_auth = SocialMediaAuth.user_auth(self)
         if 'status' in user_auth and user_auth['status'] == 'error':
             return Response(json.dumps({
-                'status': 'error',
+                'status': 'error', 
                 'message': user_auth['message'],
                 'info': 'Authentication failed'
             }), content_type='application/json', status=401)
@@ -384,7 +384,7 @@ class UsersAuthApi(http.Controller):
         if not customer_id:
             return Response(json.dumps({
                 'status': 'error',
-                'message': 'Authentication failed',
+                'message': 'Authentication failed', 
                 'info': 'User ID missing from authentication'
             }), content_type='application/json', status=400)
 
@@ -409,10 +409,23 @@ class UsersAuthApi(http.Controller):
             customer_data['name'] = name_parts[0]
             customer_data['x_last_name'] = name_parts[1] if len(name_parts) > 1 else ''
 
-
             image = customer_data.pop('image_1920', None)
-            image_path = os.path.join('images', 'profilepics', str(customer_id), f'profile_{customer_id}.png')
-            customer_data['image_path'] = f'/{image_path}'
+            profile_filename = f'profile_{random.randint(1, 5000)}_{customer_id}.png'
+            image_path = f'/images/profilepics/{customer_id}/{profile_filename}'
+            customer_data['image_path'] = image_path
+
+            # Save image if exists
+            if image:
+                save_dir = os.path.join('/mnt/data/images', 'profilepics', str(customer_id))
+                os.makedirs(save_dir, exist_ok=True)
+                
+                # Clean existing files
+                for file in os.listdir(save_dir):
+                    os.remove(os.path.join(save_dir, file))
+                    
+                # Save new image
+                with open(os.path.join(save_dir, profile_filename), 'wb') as f:
+                    f.write(base64.b64decode(image))
 
             return Response(json.dumps({
                 'status': 'success',
@@ -427,14 +440,12 @@ class UsersAuthApi(http.Controller):
                 'info': str(e)
             }), content_type='application/json', status=500)
 
-    @http.route('/images/profilepics/<path:image>', type='http', auth='public', csrf=False, cors='*')
-    def get_image(self, image):
+    @http.route('/images/profilepics/<int:user_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
+    def get_image(self, user_id, image):
         try:
             base_path = '/mnt/data/images'
-            # Remove any leading slashes from image parameter
-            clean_image = image.lstrip('/')
-            image_path = os.path.join(base_path, 'profilepics', clean_image)
-            safe_path = os.path.join(base_path, 'profilepics')
+            image_path = os.path.join(base_path, 'profilepics', str(user_id), image.lstrip('/'))
+            safe_path = os.path.join(base_path, 'profilepics', str(user_id))
             
             if not os.path.abspath(image_path).startswith(os.path.abspath(safe_path)):
                 return Response(json.dumps({
@@ -445,19 +456,19 @@ class UsersAuthApi(http.Controller):
 
             if os.path.exists(image_path):
                 with open(image_path, 'rb') as f:
-                    image_data = f.read()
-                return Response(image_data, content_type='image/png')
-            else:
-                return Response(json.dumps({
-                    'error': {'message': 'Image not found'},
-                    'status': 'error',
-                    'status_code': '404'
-                }), content_type='application/json', status=404)
+                    return Response(f.read(), content_type='image/png')
+
+            return Response(json.dumps({
+                'error': {'message': 'Image not found'},
+                'status': 'error',
+                'status_code': '404'
+            }), content_type='application/json', status=404)
+
         except Exception as e:
             _logger.error('Error serving image: %s', str(e))
             return Response(json.dumps({
                 'error': {'message': 'Server error'},
-                'status': 'error',
+                'status': 'error', 
                 'status_code': '500'
             }), content_type='application/json', status=500)
 

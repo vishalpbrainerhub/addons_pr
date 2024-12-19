@@ -59,24 +59,13 @@ class ProductImport(models.Model):
             
         return category_id
 
-    def _check_existing_product(self, env, product_data):
-        """Check if product exists based on multiple criteria"""
-        domain = []
-        conditions = []
-        
-        if product_data.get('id'):
-            conditions.append(('id', '=', int(product_data['id'])))
-        if product_data.get('code_'):
-            conditions.append(('code_', '=', product_data['code_']))
-        if product_data.get('name'):
-            conditions.append(('name', '=', product_data['name']))
-        
-        if len(conditions) > 1:
-            domain = ['|'] * (len(conditions) - 1) + conditions
-        elif conditions:
-            domain = conditions
-        
-        return env['product.template'].search(domain, limit=1)
+    def _check_existing_product(self, env, external_import_id):
+        """Check if product exists based on external_import_id"""
+        if external_import_id:
+            return env['product.template'].search([
+                ('external_import_id', '=', external_import_id)
+            ], limit=1)
+        return False
 
     def _process_batch(self, env, batch):
         products_to_create = []
@@ -85,6 +74,15 @@ class ProductImport(models.Model):
         
         for row in batch:
             try:
+                # Convert external_import_id to integer
+                external_import_id = False
+                if row.get('id'):
+                    try:
+                        external_import_id = int(row['id'])
+                    except (ValueError, TypeError):
+                        _logger.error(f"Invalid external_import_id format for product {row.get('name')}: {row.get('id')}")
+                        continue
+
                 # Validate code_ format
                 if 'code_' in row and not self._validate_code(row['code_']):
                     _logger.error(f"Invalid code_ format for product {row.get('name')}: {row.get('code_')}")
@@ -93,7 +91,7 @@ class ProductImport(models.Model):
                 # Get category ID from category name
                 category_id = self._get_category_id(env, row.get('category'))
 
-                # Prepare product values for checking
+                # Prepare product values
                 product_vals = {
                     'name': row.get('name'),
                     'code_': row.get('code_'),
@@ -102,19 +100,8 @@ class ProductImport(models.Model):
                     'purchase_ok': str(row.get('purchase_ok', 'true')).lower() == 'true',
                     'categ_id': category_id,
                     'active': True,
+                    'external_import_id': external_import_id
                 }
-
-                if row.get('id'):
-                    product_vals['id'] = int(row['id'])
-                
-                # Check if product exists
-                existing_product = self._check_existing_product(env, product_vals)
-                
-                if existing_product:
-                    _logger.info(f"Skipping existing product: {product_vals.get('name')} "
-                               f"(ID: {existing_product.id}, Code: {product_vals.get('code_')})")
-                    skipped_count += 1
-                    continue
 
                 # Handle image if present
                 if row.get('image_1920'):
@@ -129,7 +116,16 @@ class ProductImport(models.Model):
                         else:
                             product_vals[field] = row[field]
 
-                products_to_create.append(product_vals)
+                # Check if product exists based on external_import_id
+                existing_product = self._check_existing_product(env, external_import_id)
+                
+                if existing_product:
+                    _logger.info(f"Updating existing product: {product_vals.get('name')} "
+                               f"(ID: {existing_product.id}, External ID: {external_import_id})")
+                    existing_product.write(product_vals)
+                    skipped_count += 1
+                else:
+                    products_to_create.append(product_vals)
                 
             except Exception as e:
                 _logger.error(f"Error processing product row {row}: {str(e)}")
@@ -188,7 +184,7 @@ class ProductImport(models.Model):
                 'params': {
                     'title': 'Product Import Complete',
                     'message': f"Successfully imported {total_created} products. "
-                              f"Skipped {total_skipped} existing products.",
+                              f"Updated {total_skipped} existing products.",
                     'type': 'success',
                 }
             }

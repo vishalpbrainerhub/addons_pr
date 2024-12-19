@@ -50,23 +50,36 @@ class PricelistImport(models.Model):
         return env['product.pricelist.item'].search(domain, limit=1)
 
     def _find_product(self, env, product_tmpl_id):
-        """Enhanced product search method"""
-        # Try direct ID search first
-        product = env['product.template'].browse(int(product_tmpl_id))
-        if product.exists():
+        """Enhanced product search method using external_import_id"""
+        try:
+            # Try to convert to integer for external_import_id search
+            external_id = int(product_tmpl_id)
+            
+            # Search by external_import_id first
+            product = env['product.template'].search([
+                ('external_import_id', '=', external_id)
+            ], limit=1)
+            
+            if product:
+                return product
+                
+            # Fallback to other search methods if not found
+            product = env['product.template'].search([
+                '|',
+                ('code_', '=', str(product_tmpl_id)),
+                ('name', '=', str(product_tmpl_id))
+            ], limit=1)
+            
             return product
-
-        # If direct search fails, try searching with various fields
-        product = env['product.template'].search([
-            '|',
-            ('id', '=', int(product_tmpl_id)),
-            '|',
-            ('default_code', '=', str(product_tmpl_id)),
-            ('name', '=', str(product_tmpl_id))
-        ], limit=1)
-
-        return product
-
+            
+        except ValueError:
+            # If product_tmpl_id is not an integer, search by code or name
+            return env['product.template'].search([
+                '|',
+                ('code_', '=', str(product_tmpl_id)),
+                ('name', '=', str(product_tmpl_id))
+            ], limit=1)
+    
     def _process_batch(self, env, batch):
         pricelist_items = []
         skipped_count = 0
@@ -80,10 +93,10 @@ class PricelistImport(models.Model):
                     skipped_count += 1
                     continue
 
-                # Use enhanced product search
+                # Use enhanced product search with external_import_id
                 product = self._find_product(env, product_tmpl_id)
                 if not product:
-                    _logger.warning(f"Product template {product_tmpl_id} not found, skipping")
+                    _logger.warning(f"Product with external ID/code/name {product_tmpl_id} not found, skipping")
                     skipped_count += 1
                     continue
 
@@ -94,50 +107,61 @@ class PricelistImport(models.Model):
                     'discount_policy': row['discount_policy']
                 })
 
+                # Determine compute_price based on fixed_price field value
+                compute_price = 'fixed'
+                if row.get('item_idsfixed_price') == 'percentage':
+                    compute_price = 'percentage'
+
                 # Parse dates
                 date_start = None
                 date_end = None
-                if row.get('item_idsdate_start'):
-                    date_start = datetime.strptime(row['item_idsdate_start'], '%Y-%m-%d %H:%M:%S')
                 if row.get('item_idsdate_end'):
-                    date_end = datetime.strptime(row['item_idsdate_end'], '%Y-%m-%d %H:%M:%S')
+                    try:
+                        date_end = datetime.strptime(row['item_idsdate_end'], '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        _logger.warning(f"Invalid date_end format: {row['item_idsdate_end']}")
 
-                # Check for existing pricelist item
-                existing_item = self._check_existing_pricelist_item(
-                    env, pricelist_id, product.id, date_start, date_end
-                )
-                
-                if existing_item:
-                    _logger.info(f"Pricelist item already exists for product {product.name} (ID: {product.id}), skipping")
-                    skipped_count += 1
-                    continue
+                # Get minimum quantity
+                min_quantity = 1.0
+                if row.get('item_idsmin_quantity'):
+                    try:
+                        min_quantity = float(row['item_idsmin_quantity'])
+                    except (ValueError, TypeError):
+                        _logger.warning(f"Invalid min_quantity: {row['item_idsmin_quantity']}, using default 1.0")
 
                 # Prepare item values
                 item_vals = {
                     'pricelist_id': pricelist_id,
                     'product_tmpl_id': product.id,
                     'base': 'list_price',
-                    'applied_on': '0_product_variant',
-                    'compute_price': row['item_idscompute_price'].lower(),
+                    'applied_on': '1_product',
+                    'compute_price': compute_price,
+                    'min_quantity': min_quantity
                 }
-                
-                if row.get('item_idsmin_quantity'):
-                    item_vals['min_quantity'] = float(row['item_idsmin_quantity'])
-                    
-                if row['item_idscompute_price'] == 'percentage':
-                    if row.get('item_idspercent_price'):
-                        item_vals['percent_price'] = float(row['item_idspercent_price'])
-                elif row['item_idscompute_price'] == 'fixed':
-                    if row.get('item_idsfixed_price'):
-                        item_vals['fixed_price'] = float(row['item_idsfixed_price'])
 
-                if date_start:
-                    item_vals['date_start'] = date_start
+                # Add price values based on compute_price type
+                if compute_price == 'percentage':
+                    # Get percentage from discount1 field
+                    if row.get('item_idsdiscount1'):
+                        try:
+                            item_vals['percent_price'] = -float(row['item_idsdiscount1'])  # Negative because discount
+                        except (ValueError, TypeError):
+                            _logger.warning(f"Invalid discount percentage: {row['item_idsdiscount1']}")
+                            continue
+                else:  # fixed
+                    if row.get('item_idspercent_price'):
+                        try:
+                            item_vals['fixed_price'] = float(row['item_idspercent_price'])
+                        except (ValueError, TypeError):
+                            _logger.warning(f"Invalid fixed price: {row['item_idspercent_price']}")
+                            continue
+
+                # Add dates if they exist
                 if date_end:
                     item_vals['date_end'] = date_end
 
+                _logger.info(f"Final item values: {item_vals}")
                 pricelist_items.append(item_vals)
-                _logger.info(f"Successfully prepared pricelist item for product {product.name} (ID: {product.id})")
                 
             except Exception as e:
                 _logger.error(f"Error processing pricelist item: {str(e)}, Row: {row}")
@@ -145,8 +169,12 @@ class PricelistImport(models.Model):
                 continue
 
         if pricelist_items:
-            env['product.pricelist.item'].create(pricelist_items)
-            _logger.info(f"Successfully created {len(pricelist_items)} pricelist items")
+            try:
+                env['product.pricelist.item'].create(pricelist_items)
+                _logger.info(f"Successfully created {len(pricelist_items)} pricelist items")
+            except Exception as e:
+                _logger.error(f"Error creating pricelist items: {str(e)}")
+                raise
         return len(pricelist_items), skipped_count
 
     def import_pricelists(self):

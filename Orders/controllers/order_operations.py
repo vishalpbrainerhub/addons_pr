@@ -93,7 +93,8 @@ class Ecommerce_orders(http.Controller):
                     'info': 'Order not found.'
                 }), content_type='application/json', status=404)
 
-            order_reward_points = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)]).points
+            reward_points_records = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)])
+            order_reward_points = sum(reward_points_records.mapped('points')) if reward_points_records else 0
             response_data = []
 
             for order in orders:

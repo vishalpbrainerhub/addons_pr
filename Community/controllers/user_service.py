@@ -18,13 +18,9 @@ class Users(http.Controller):
     # ---------------------- Done --------------------------------
     @http.route('/user/login', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def login(self):
-        """
-        Description: Authenticates a customer and generates a session token.
-        Parameters: email, password
-        """
         try:
-            email = request.jsonrequest.get('email', False)
-            password = request.jsonrequest.get('password', False)
+            email = request.jsonrequest.get('email')
+            password = request.jsonrequest.get('password')
 
             if not email or not password:
                 return {
@@ -33,54 +29,37 @@ class Users(http.Controller):
                     "info": "Email and password are required"
                 }
 
-            # Find customer instead of user
             customer = request.env['res.partner'].sudo().search([
                 ('email', '=', email),
-                ('customer_rank', '>', 0)  # Ensure it's a customer
+                ('customer_rank', '>', 0),
             ], limit=1)
 
             if not customer:
                 return {
-                    "status": "error",
-                    "message": "Utente non trovato",
-                    "info": "User not found"
+                    "status": "error", 
+                    "message": "Credenziali non valide",
+                    "info": "Invalid credentials"
                 }
 
-           
-
-            # Create JWT token
             payload = {
                 'user_id': customer.id,
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }
 
-            # Fix for JWT secret key
-            secret_key = 'testing'
-            if not secret_key:
-                return {
-                    "status": "error",
-                    "message": "Chiave segreta JWT non configurata",
-                    "info": "JWT secret key not configured"
-                }
-
-            token = jwt.encode(payload, str(secret_key), algorithm='HS256')
-
-            # Prepare user data from customer
-            user_data = {
-                'name': customer.name,
-                'login': customer.email,  
-                'email': customer.email,
-                'phone': customer.phone,
-                'company_id': customer.company_id.id if customer.company_id else False,
-                'lang': customer.lang or 'en_US'
-            }
+            token = jwt.encode(payload, 'testing', algorithm='HS256')
 
             return {
                 "status": "success",
-                "message": "Accesso utente eseguito con successo, procedi con il completamento",
-                "info": "User login successful, proceed to completion",
-                "user": user_data,
-                "token": token.decode('utf-8') if isinstance(token, bytes) else token,
+                "message": "Accesso eseguito con successo",
+                "info": "Login successful",
+                "user": {
+                    'name': customer.name,
+                    'email': customer.email,
+                    'phone': customer.phone,
+                    'company_id': customer.company_id.id if customer.company_id else False,
+                    'lang': customer.lang or 'en_US'
+                },
+                "token": token if isinstance(token, str) else token.decode('utf-8')
             }
 
         except Exception as e:
@@ -88,10 +67,10 @@ class Users(http.Controller):
             return {
                 "status": "error",
                 "message": "Errore del server",
-                "info": "Server error occurred"
+                "info": str(e)
             }
 
-
+    
      # ---------------------- Done --------------------------------
     
     

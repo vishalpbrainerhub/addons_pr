@@ -51,6 +51,7 @@ class PartnerImport(models.Model):
                 partner_vals = {
                     'name': row.get('name'),
                     'email': row.get('email'),
+                    'customer_rank': 1,
                     'vat': row.get('vat'),
                     'street': row.get('street'),
                     'city': row.get('city'),

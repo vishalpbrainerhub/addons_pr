@@ -405,9 +405,10 @@ class UsersAuthApi(http.Controller):
                                         'street', 'city', 'zip', 'country_id', 
                                         'company_id', 'image_1920'])[0]
             
-            test = customer_data['name'].split(' ')[0]
-            customer_data['x_last_name'] = customer_data['name'].split(' ')[1]
-            customer_data['name'] = test
+            name_parts = customer_data['name'].split(' ', 1)
+            customer_data['name'] = name_parts[0]
+            customer_data['x_last_name'] = name_parts[1] if len(name_parts) > 1 else ''
+
 
             image = customer_data.pop('image_1920', None)
             base_path = '/mnt/data/images'

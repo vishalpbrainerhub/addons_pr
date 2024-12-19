@@ -138,7 +138,8 @@ class SocialMedia(http.Controller):
                 post.update({
                     'profile_image': f'/{profile_image}',
                     'user_name': user_info.name,
-                    'image': post['image'] if post['image'] else None,
+                    
+                    'image': post['image'].replace('/mnt/data', '') if post['image'] else None,
                     'timestamp': post['timestamp'].isoformat() if post['timestamp'] else None,
                     'is_liked': bool(request.env['social_media.like'].search([
                         ('partner_id', '=', user_auth['user_id']), 

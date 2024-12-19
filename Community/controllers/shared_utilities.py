@@ -64,4 +64,5 @@ def Upload_image(image_file):
     with open(file_path, 'wb') as file:
         file.write(image_file.read())
 
+    
     return file_path

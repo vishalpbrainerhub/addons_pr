@@ -182,17 +182,19 @@ class SocialMedia(http.Controller):
         Parameters: image - The path of the image to retrieve.
         """
         try:
-            image_path = os.path.join('images/community', image)
+            base_path = '/mnt/data/images'
+            image_path = os.path.join(base_path, 'community', image)
+            safe_path = os.path.join(base_path, 'community')
             
             # Basic path traversal protection
-            if not os.path.abspath(image_path).startswith(os.path.abspath('images/community')):
+            if not os.path.abspath(image_path).startswith(os.path.abspath(safe_path)):
                 return Response(json.dumps({
                     'status': 'error',
                     'message': 'Percorso immagine non valido',  # Italian for 'Invalid image path'
                     'info': 'Invalid image path detected'
                 }), content_type='application/json', status=403)
 
-            if os.path.exists(image_path):
+            if os.path.exists(image_path) and os.path.isfile(image_path):
                 with open(image_path, 'rb') as f:
                     image_data = f.read()
                 return Response(image_data, content_type='image/png')
@@ -210,7 +212,6 @@ class SocialMedia(http.Controller):
                 'message': 'Errore del server',  # Italian for 'Server error'
                 'info': str(e)
             }), content_type='application/json', status=500)
-
 
     @http.route('/social_media/delete_post/<int:post_id>', type='http', auth='public', methods=['DELETE', 'OPTIONS'], csrf=False, cors='*')
     def delete_post(self, post_id):

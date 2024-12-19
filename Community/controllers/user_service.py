@@ -99,12 +99,14 @@ class Users(http.Controller):
     def banners(self):
         banners = []
         try:
-            banner_dir = 'images/banners'
+            base_path = '/mnt/data/images'
+            banner_dir = os.path.join(base_path, 'banners')
             for root, dirs, files in os.walk(banner_dir):
                 for file in files:
                     if file.endswith((".jpg", ".png")):
                         path = os.path.join(root, file)
-                        banners.append(f'/{path}')
+                        relative_path = os.path.relpath(path, base_path)
+                        banners.append(f'/images/{relative_path}')
         
             data = {
                 "status": "success",
@@ -119,11 +121,20 @@ class Users(http.Controller):
                 "info": str(e)
             }
         return request.make_response(json.dumps(data), [('Content-Type', 'application/json')])
-    
-    # ---------------------- Done --------------------------------
+
     @http.route('/images/banners/<path:image>', type='http', auth='public', csrf=False)
     def get_image(self, image):
-        image_path = os.path.join('images/banners', image)
+        base_path = '/mnt/data/images'
+        image_path = os.path.join(base_path, 'banners', image)
+        safe_path = os.path.join(base_path, 'banners')
+
+        if not os.path.abspath(image_path).startswith(os.path.abspath(safe_path)):
+            return Response(json.dumps({
+                'error': {'message': 'Invalid image path'},
+                'status': 'error',
+                'status_code': '403'
+            }), content_type='application/json', status=403)
+
         if os.path.exists(image_path):
             with open(image_path, 'rb') as f:
                 image_data = f.read()
@@ -133,77 +144,3 @@ class Users(http.Controller):
             'status': 'error',
             'status_code': '404'
         }), content_type='application/json', status=404)
-    
-
-    @http.route('/api/export/customers', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
-    def export_customers(self):
-        """
-        Export customer data to CSV file
-        Fields: id, name, vat, l10n_it_codice_fiscale (if available), property_product_pricelist
-        """
-        if request.httprequest.method == 'OPTIONS':
-            return self._handle_options()
-
-        try:
-            # Create OUT directory if it doesn't exist
-            os.makedirs('OUT', exist_ok=True)
-
-            # Generate filename with timestamp
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f'OUT/customers_export_{timestamp}.csv'
-
-            # Get all customers
-            Partner = request.env['res.partner'].sudo()
-            
-            # Check if l10n_it_codice_fiscale field exists
-            has_codice_fiscale = 'l10n_it_codice_fiscale' in Partner._fields
-            
-            # Define fields based on availability
-            fieldnames = ['id', 'name', 'vat']
-            if has_codice_fiscale:
-                fieldnames.append('l10n_it_codice_fiscale')
-            fieldnames.append('property_product_pricelist')
-
-            # Get all customers
-            customers = Partner.search([('customer_rank', '>', 0)])
-
-            # Write to CSV
-            with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                
-                # Write headers
-                writer.writeheader()
-                
-                # Write customer data
-                for customer in customers:
-                    # Prepare row data
-                    row = {
-                        'id': customer.id,
-                        'name': customer.name or '',
-                        'vat': customer.vat or '',
-                    }
-                    
-                    # Add codice fiscale if field exists
-                    if has_codice_fiscale:
-                        row['l10n_it_codice_fiscale'] = getattr(customer, 'l10n_it_codice_fiscale', '') or ''
-                    
-                    # Add pricelist
-                    row['property_product_pricelist'] = customer.property_product_pricelist.name if customer.property_product_pricelist else ''
-                    
-                    writer.writerow(row)
-
-            # Return success response with file path
-            return Response(json.dumps({
-                'status': 'success',
-                'message': 'File esportato con successo',
-                'info': 'File exported successfully',
-                'file_path': filename
-            }), content_type='application/json')
-
-        except Exception as e:
-            _logger.error('Error exporting customers: %s', str(e))
-            return Response(json.dumps({
-                'status': 'error',
-                'message': 'Errore durante l\'esportazione dei clienti',
-                'info': str(e)
-            }), content_type='application/json', status=500)

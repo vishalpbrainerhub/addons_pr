@@ -367,7 +367,6 @@ class UsersAuthApi(http.Controller):
             }), content_type='application/json', status=500)
         
 
-    # ---------------------- DOne ---------------------
     @http.route('/user/details', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def user_details(self):
         if request.httprequest.method == 'OPTIONS':
@@ -381,7 +380,7 @@ class UsersAuthApi(http.Controller):
                 'info': 'Authentication failed'
             }), content_type='application/json', status=401)
 
-        customer_id = user_auth.get('user_id')  # This is now customer_id from auth
+        customer_id = user_auth.get('user_id')
         if not customer_id:
             return Response(json.dumps({
                 'status': 'error',
@@ -402,24 +401,23 @@ class UsersAuthApi(http.Controller):
             }), content_type='application/json', status=404)
         
         try:
-            # Read customer data
             customer_data = customer.read(['name', 'email', 'phone', 'mobile', 
                                         'street', 'city', 'zip', 'country_id', 
                                         'company_id', 'image_1920'])[0]
             
-            # Handle image
-            # name and last name divide it by space
             test = customer_data['name'].split(' ')[0]
             customer_data['x_last_name'] = customer_data['name'].split(' ')[1]
             customer_data['name'] = test
 
             image = customer_data.pop('image_1920', None)
-            image_path = save_user_image(customer_id, image)  # Reusing the same image saving function
+            base_path = '/mnt/data/images'
+            image_path = os.path.join(base_path, 'profilepics', str(customer_id), 
+                                    f'profile_{customer_id}.png')
             customer_data['image_path'] = f'/{image_path}'
 
             return Response(json.dumps({
                 'status': 'success',
-                'user': customer_data  # Keeping 'user' key for consistency
+                'user': customer_data
             }), content_type='application/json')
 
         except Exception as e:
@@ -430,17 +428,14 @@ class UsersAuthApi(http.Controller):
                 'info': str(e)
             }), content_type='application/json', status=500)
 
-    # ---------------------- DOne ---------------------
     @http.route('/images/profilepics/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_image(self, image):
-        """
-        Serve images from the local images directory with security checks
-        """
         try:
-            image_path = os.path.join('images/profilepics', image)
+            base_path = '/mnt/data/images'
+            image_path = os.path.join(base_path, 'profilepics', image)
+            safe_path = os.path.join(base_path, 'profilepics')
             
-            # Basic path traversal protection
-            if not os.path.abspath(image_path).startswith(os.path.abspath('images/profilepics')):
+            if not os.path.abspath(image_path).startswith(os.path.abspath(safe_path)):
                 return Response(json.dumps({
                     'error': {'message': 'Invalid image path'},
                     'status': 'error',

@@ -8,6 +8,10 @@ import base64
 
 load_dotenv()
 
+def get_base_image_path():
+    """Return the base path for all image operations"""
+    return '/mnt/data/images'
+
 def generate_password(email):
     characters = ["!", "@", "#", "$", "%", "&", "*"]
     test = email.split('@')[0].capitalize()
@@ -17,16 +21,18 @@ def forgot_password(email, password, to_email):
     return True 
 
 def get_user_profile_image_path(user_id):
-    image_dir = f'images/profilepics/{user_id}'
+    base_path = get_base_image_path()
+    image_dir = os.path.join(base_path, 'profilepics', str(user_id))
     if os.path.exists(image_dir) and os.listdir(image_dir):
-        return f'{image_dir}/{os.listdir(image_dir)[0]}'
+        return os.path.join(image_dir, os.listdir(image_dir)[0])
     return 'None'
 
 def save_user_image(user_id, image_data):
     if not image_data:
         return 'None'
 
-    save_directory = f'images/profilepics/{user_id}'
+    base_path = get_base_image_path()
+    save_directory = os.path.join(base_path, 'profilepics', str(user_id))
     os.makedirs(save_directory, exist_ok=True)
 
     # Clean up existing files
@@ -49,7 +55,8 @@ def Upload_image(image_file):
     Returns:
         str: The path to the saved image.
     """
-    save_directory = 'images/community'
+    base_path = get_base_image_path()
+    save_directory = os.path.join(base_path, 'community')
     os.makedirs(save_directory, exist_ok=True)
 
     file_path = os.path.join(save_directory, f'post_image_{random.randint(100000, 999999)}.png')

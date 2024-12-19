@@ -1,6 +1,0 @@
-id,name,list_price,code_,category,image_1920,sale_ok,purchase_ok
-1,Laptop XPS 13,1299.99,1234567890123,Electronics/Computers,,true,true
-2,Wireless Mouse,29.99,2234567890123,Electronics/Accessories,,true,true
-3,USB-C Cable,14.99,3234567890123,Electronics/Accessories,,true,true
-4,Office Chair,199.99,4234567890123,Furniture/Office,,true,true
-5,Desktop Monitor,349.99,5234567890123,Electronics/Computers,,true,true

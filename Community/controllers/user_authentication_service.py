@@ -18,48 +18,30 @@ class UsersAuthApi(http.Controller):
         headers = SocialMediaAuth.get_cors_headers()
         return request.make_response('', headers=headers)
     
-    @http.route('/user/reset_password', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
+    @http.route('/user/reset_password', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def reset_password(self):
-        """
-        Description: Allows a user to reset their password after verifying the old password.
-        Parameters: old_password, new_password
-        """
-        if request.httprequest.method == 'OPTIONS':
-            return self._handle_options()
-
-        old_password = request.jsonrequest.get('old_password', False)
-        new_password = request.jsonrequest.get('new_password', False)
-
-        if not old_password or not new_password:
-            return {'status': 'error', 'message': 'Sono richieste sia la vecchia password che la nuova password'}
-
-        user_auth = SocialMediaAuth.user_auth(self)  # Assuming this is a custom authentication method
-        if user_auth['status'] == 'error':
-            return {
-                'status': 'error',
-                'message': user_auth['message'],  # Assuming this message comes already in Italian
-                'info': "Both old and new passwords are required",
-                'status_code': 401  # Unauthorized
-            }
-
         try:
-            # Fetch the user based on the authenticated user ID
-            user = request.env['res.users'].sudo().browse(user_auth['user_id'])
-            if not user:
-                return {'status': 'error', 'message': 'Utente non trovato', 'info': "User not found"}
+            old_password = request.jsonrequest.get('old_password')
+            new_password = request.jsonrequest.get('new_password')
 
-            # Verify the old password
-            try:
-                user._check_credentials(old_password)
-                user.sudo().write({'password': new_password})
-                return {'status': 'success', 'message': 'La password è stata correttamente resettata', 'info': "Password has been successfully reset"}
-            except AccessDenied as e:
-                _logger.error('Password reset error: %s', str(e))
-                return {'status': 'error', 'message': "Accesso negato", 'info': "Access denied", 'status_code': 401}
+            auth_result = SocialMediaAuth.user_auth(self)
+            if auth_result['status'] == 'error':
+                return auth_result
+
+            customer_id = auth_result['user_id']
+            pwd_record = request.env['customer.password'].sudo().search([
+                ('partner_id', '=', customer_id)
+            ], limit=1)
+
+            if not pwd_record or not pwd_record.verify_password(old_password):
+                return {"status": "error", "message": "Password attuale non corretta"}
+
+            pwd_record.set_password(new_password)
+            return {"status": "success", "message": "Password aggiornata con successo"}
 
         except Exception as e:
-            _logger.error('General error during password reset: %s', str(e))
-            return {'status': 'error', 'message': "Errore nel reset della password", 'info': "Error in password reset", 'status_code': 500}
+            _logger.error('Password reset error: %s', str(e))
+            return {"status": "error", "message": "Errore del server"}
 
 
         

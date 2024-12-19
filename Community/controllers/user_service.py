@@ -70,10 +70,11 @@ class Users(http.Controller):
                 "info": str(e)
             }
 
+
     
      # ---------------------- Done --------------------------------
     
-    
+
     @http.route('/api/banners', auth='public', methods=['GET', 'OPTIONS'], csrf=False)
     def banners(self):
         banners = []

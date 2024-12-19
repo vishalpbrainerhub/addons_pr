@@ -65,10 +65,6 @@ class UsersAuthApi(http.Controller):
         
     @http.route('/user/add_address', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def add_address(self):
-        """
-        Description: Adds or updates the customer's address in the system.
-        Parameters: address, continued_address, city, postal_code, village, country_id, state_id
-        """
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()
 
@@ -80,7 +76,7 @@ class UsersAuthApi(http.Controller):
         country_id = request.jsonrequest.get('country_id', False)
         state_id = request.jsonrequest.get('state_id', False)
         
-        user_auth = SocialMediaAuth.user_auth(self)  # Assuming this is a custom authentication method
+        user_auth = SocialMediaAuth.user_auth(self)
         if user_auth['status'] == 'error':
             return {
                 'status': 'error',
@@ -91,45 +87,53 @@ class UsersAuthApi(http.Controller):
 
         try:
             partner_id = user_auth['user_id']
-            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', partner_id)])
-            _logger.info(f"Customer Address: {customer_address}")
+            customer_addresses = request.env['social_media.custom_address'].search([('partner_id', '=', partner_id)])
             
-            address_action = 'updated'
-            # Check if the customer address exists and update or create new
-            if not customer_address:
-                address_action = 'created'
-                customer_address = request.env['social_media.custom_address'].create({
-                    'partner_id': partner_id,
-                    'address': address_details,
-                    'continued_address': continued_address,
-                    'city': city,
-                    'postal_code': postal_code,
-                    'village': village,
-                    'country_id': country_id,
-                    'state_id': state_id,
-                    'default': True
-                })
-
-            partner = request.env['res.partner'].sudo().browse(partner_id)
-            if not partner:
-                return {'status': 'error', 'message': 'Cliente non trovato', 'info': "Customer not found"}
-
-            partner.sudo().write({
-                'street': address_details,
-                'street2': continued_address + ' ' + village,
+            # Create new address
+            is_default = not bool(customer_addresses)  # Set default if first address
+            new_address = request.env['social_media.custom_address'].create({
+                'partner_id': partner_id,
+                'address': address_details,
+                'continued_address': continued_address,
                 'city': city,
-                'zip': postal_code,
+                'postal_code': postal_code,
+                'village': village,
                 'country_id': country_id,
-                'state_id': state_id
+                'state_id': state_id,
+                'default': is_default
             })
 
-            return {'status': 'success', 'message': f'Indirizzo {address_action} con successo', 'info': f'Address {address_action} successfully'}
+            # Update partner fields if default address
+            if is_default:
+                partner = request.env['res.partner'].sudo().browse(partner_id)
+                if not partner:
+                    return {'status': 'error', 'message': 'Cliente non trovato', 'info': "Customer not found"}
+
+                partner.sudo().write({
+                    'street': address_details,
+                    'street2': continued_address + ' ' + village,
+                    'city': city,
+                    'zip': postal_code,
+                    'country_id': country_id,
+                    'state_id': state_id
+                })
+
+            return {
+                'status': 'success', 
+                'message': 'Indirizzo aggiunto con successo',
+                'info': 'Address added successfully',
+                'address_id': new_address.id
+            }
         
         except Exception as e:
-            _logger.error(f"Error in add/update address: {str(e)}")
-            return {'status': 'error', 'message': "Errore durante l'aggiornamento dell'indirizzo", 'info': str(e), 'status_code': 500}
-
-
+            _logger.error(f"Error in adding address: {str(e)}")
+            return {
+                'status': 'error',
+                'message': "Errore durante l'aggiunta dell'indirizzo",
+                'info': str(e),
+                'status_code': 500
+            }
+   
     @http.route('/user/get_address', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_address(self):
         """

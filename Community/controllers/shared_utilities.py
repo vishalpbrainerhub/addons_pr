@@ -21,10 +21,11 @@ def forgot_password(email, password, to_email):
     return True 
 
 def get_user_profile_image_path(user_id):
-    base_path = get_base_image_path()
-    image_dir = os.path.join(base_path, 'profilepics', str(user_id))
-    if os.path.exists(image_dir) and os.listdir(image_dir):
-        return os.path.join(image_dir, os.listdir(image_dir)[0])
+    image_dir = os.path.join('images', 'profilepics', str(user_id))
+    base_path = os.path.join('/mnt/data', image_dir)
+    
+    if os.path.exists(base_path) and os.listdir(base_path):
+        return os.path.join(image_dir, os.listdir(base_path)[0])
     return 'None'
 
 def save_user_image(user_id, image_data):

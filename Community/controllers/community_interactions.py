@@ -136,7 +136,7 @@ class SocialMedia(http.Controller):
                 profile_image = get_user_profile_image_path(user_info.id)
 
                 post.update({
-                    'profile_image': f'/{profile_image}',
+                    'profile_image': profile_image,
                     'user_name': user_info.name,
                     
                     'image': post['image'].replace('/mnt/data', '') if post['image'] else None,

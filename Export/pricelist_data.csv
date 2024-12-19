@@ -1,6 +1,0 @@
-id,name,discount_policy,item_idsproduct_tmpl_id,item_idsproduct_id,item_idscateg_id,item_idsmin_quantity,item_idsapplied_on,item_idsbase,item_idsbase_pricelist_id,item_idsprice_surcharge,item_idsprice_round,item_idsprice_min_margin,item_idsprice_max_margin,item_idsdate_start,item_idsdate_end,item_idscompute_price,item_idsfixed_price,item_idspercent_price,item_idsdiscount1,item_idsdiscount2,item_idsdiscount3,item_idsprice_discount
-100,Standard Discount,without_discount,1,,1,10,0_product_variant,list_price,,,,,,,2024-01-01 00:00:00,2024-12-31 23:59:59,percentage,,15,,,
-101,Bulk Purchase,without_discount,2,,1,50,0_product_variant,list_price,,,,,,,2024-01-01 00:00:00,2024-12-31 23:59:59,percentage,,25,,,
-102,Special Price,without_discount,3,,1,1,0_product_variant,list_price,,,,,,,2024-01-01 00:00:00,2024-12-31 23:59:59,fixed,10.99,,,,
-103,VIP Discount,without_discount,4,,1,1,0_product_variant,list_price,,,,,,,2024-01-01 00:00:00,2024-12-31 23:59:59,percentage,,30,,,
-104,Seasonal Sale,without_discount,5,,1,1,0_product_variant,list_price,,,,,,,2024-06-01 00:00:00,2024-08-31 23:59:59,percentage,,20,,,

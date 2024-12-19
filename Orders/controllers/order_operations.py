@@ -334,7 +334,8 @@ class Ecommerce_orders(http.Controller):
 
             new_order.sudo().action_confirm()
 
-            order_reward_points = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)]).points
+            reward_points_records = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)])
+            order_reward_points = sum(reward_points_records.mapped('points')) if reward_points_records else 0
             if order_reward_points:
                 request.env['rewards.points'].sudo().create({
                     'points': order_reward_points,

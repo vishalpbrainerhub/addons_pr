@@ -411,9 +411,7 @@ class UsersAuthApi(http.Controller):
 
 
             image = customer_data.pop('image_1920', None)
-            base_path = '/mnt/data/images'
-            image_path = os.path.join(base_path, 'profilepics', str(customer_id), 
-                                    f'profile_{customer_id}.png')
+            image_path = os.path.join('images', 'profilepics', str(customer_id), f'profile_{customer_id}.png')
             customer_data['image_path'] = f'/{image_path}'
 
             return Response(json.dumps({

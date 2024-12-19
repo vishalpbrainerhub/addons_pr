@@ -431,7 +431,9 @@ class UsersAuthApi(http.Controller):
     def get_image(self, image):
         try:
             base_path = '/mnt/data/images'
-            image_path = os.path.join(base_path, 'profilepics', image)
+            # Remove any leading slashes from image parameter
+            clean_image = image.lstrip('/')
+            image_path = os.path.join(base_path, 'profilepics', clean_image)
             safe_path = os.path.join(base_path, 'profilepics')
             
             if not os.path.abspath(image_path).startswith(os.path.abspath(safe_path)):

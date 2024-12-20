@@ -179,8 +179,7 @@ class MobileEcommerceApiController(http.Controller):
                     headers={'Access-Control-Allow-Origin': '*'}
                 )
             user_id = user_info['user_id']
-            users_dict = request.env['res.users'].sudo().search([('id', '=', user_id)])
-            partner_id = users_dict.partner_id.id
+            partner_id = user_info['user_id']
 
             # Retrieve the product data based on code
             product_data = request.env['product.template'].search_read([('code_', '=', product_code)], [

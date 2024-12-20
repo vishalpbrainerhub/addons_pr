@@ -8,6 +8,9 @@ import logging
 import csv
 import os
 import datetime
+import random
+import string
+from odoo.exceptions import UserError
 
 load_dotenv()
 _logger = logging.getLogger(__name__)
@@ -16,6 +19,60 @@ _logger = logging.getLogger(__name__)
 class Users(http.Controller):
 
     # ---------------------- Done --------------------------------
+    # @http.route('/user/login', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    # def login(self):
+    #     try:
+    #         email = request.jsonrequest.get('email')
+    #         password = request.jsonrequest.get('password')
+
+    #         if not email or not password:
+    #             return {
+    #                 "status": "error",
+    #                 "message": "Email e password sono richieste",
+    #                 "info": "Email and password are required"
+    #             }
+
+    #         customer = request.env['res.partner'].sudo().search([
+    #             ('email', '=', email),
+    #             ('customer_rank', '>', 0),
+    #         ], limit=1)
+
+    #         if not customer:
+    #             return {
+    #                 "status": "error", 
+    #                 "message": "Credenziali non valide",
+    #                 "info": "Invalid credentials"
+    #             }
+
+    #         payload = {
+    #             'user_id': customer.id,
+    #             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+    #         }
+
+    #         token = jwt.encode(payload, 'testing', algorithm='HS256')
+
+    #         return {
+    #             "status": "success",
+    #             "message": "Accesso eseguito con successo",
+    #             "info": "Login successful",
+    #             "user": {
+    #                 'name': customer.name,
+    #                 'email': customer.email,
+    #                 'phone': customer.phone,
+    #                 'company_id': customer.company_id.id if customer.company_id else False,
+    #                 'lang': customer.lang or 'en_US'
+    #             },
+    #             "token": token if isinstance(token, str) else token.decode('utf-8')
+    #         }
+
+    #     except Exception as e:
+    #         _logger.error('Login error: %s', str(e))
+    #         return {
+    #             "status": "error",
+    #             "message": "Errore del server",
+    #             "info": str(e)
+    #         }
+
     @http.route('/user/login', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def login(self):
         try:
@@ -23,11 +80,7 @@ class Users(http.Controller):
             password = request.jsonrequest.get('password')
 
             if not email or not password:
-                return {
-                    "status": "error",
-                    "message": "Email e password sono richieste",
-                    "info": "Email and password are required"
-                }
+                return {"status": "error", "message": "Email e password sono richieste"}
 
             customer = request.env['res.partner'].sudo().search([
                 ('email', '=', email),
@@ -35,23 +88,52 @@ class Users(http.Controller):
             ], limit=1)
 
             if not customer:
-                return {
-                    "status": "error", 
-                    "message": "Credenziali non valide",
-                    "info": "Invalid credentials"
-                }
+                return {"status": "error", "message": "Credenziali non valide"}
+
+            password_record = request.env['customer.password'].sudo().search([
+                ('partner_id', '=', customer.id)
+            ], limit=1)
+
+            if not password_record:
+                # Generate random password
+                random_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                
+                # Create password record
+                password_record = request.env['customer.password'].sudo().create({
+                    'partner_id': customer.id
+                })
+                password_record.set_password(random_password)
+
+                # Send email with credentials
+                template = request.env['mail.template'].sudo().create({
+                    'name': 'Customer Credentials',
+                    'email_from': 'admin@primapaint.com',
+                    'email_to': customer.email,
+                    'subject': 'Your Login Credentials',
+                    'body_html': f'''
+                        <p>Hello {customer.name},</p>
+                        <p>Your login credentials:</p>
+                        <p>Email: {customer.email}<br/>
+                        Password: {random_password}</p>
+                    ''',
+                    'model_id': request.env['ir.model']._get('res.partner').id
+                })
+                template.send_mail(customer.id, force_send=True)
+                
+                return {"status": "error", "message": "Credenziali inviate via email"}
+
+            if not password_record.verify_password(password):
+                return {"status": "error", "message": "Credenziali non valide"}
 
             payload = {
                 'user_id': customer.id,
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }
-
             token = jwt.encode(payload, 'testing', algorithm='HS256')
 
             return {
                 "status": "success",
                 "message": "Accesso eseguito con successo",
-                "info": "Login successful",
                 "user": {
                     'name': customer.name,
                     'email': customer.email,
@@ -64,12 +146,7 @@ class Users(http.Controller):
 
         except Exception as e:
             _logger.error('Login error: %s', str(e))
-            return {
-                "status": "error",
-                "message": "Errore del server",
-                "info": str(e)
-            }
-
+            return {"status": "error", "message": "Errore del server", "info": str(e)}
 
     
      # ---------------------- Done --------------------------------

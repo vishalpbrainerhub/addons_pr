@@ -286,25 +286,25 @@ class Ecommerce_orders(http.Controller):
             shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
             template = request.env['mail.template'].sudo().create({
-            'name': 'Order Confirmation',
+            'name': 'Conferma Ordine',
             'email_from': 'admin@primapaint.com',
             'email_to': order.partner_id.email,
-            'subject': f'Order #{order.name} Confirmed',
+            'subject': f'Ordine #{order.name} Confermato',
             'body_html': f'''
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #2C3E50;">Order Confirmation</h2>
+                    <h2 style="color: #2C3E50;">Conferma Ordine</h2>
                     
-                    <p>Dear {order.partner_id.name},</p>
+                    <p>Caro/a {order.partner_id.name},</p>
                     
-                    <p>Thank you for your order. Your order details:</p>
+                    <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
                     
                     <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                        <p><strong>Order Number:</strong> {order.name}</p>
-                        <p><strong>Order Date:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
-                        <p><strong>Total Amount:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                        <p><strong>Numero Ordine:</strong> {order.name}</p>
+                        <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                        <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
                     </div>
 
-                    <h3 style="color: #2C3E50; margin-top: 20px;">Shipping Address:</h3>
+                    <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
                     <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
                         {order.partner_shipping_id.street or ''}<br>
                         {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
@@ -312,7 +312,7 @@ class Ecommerce_orders(http.Controller):
                     </p>
 
                     <p style="color: #666; margin-top: 30px; font-size: 12px;">
-                        If you have any questions, please contact our customer service.
+                        Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
                     </p>
                 </div>
             ''',
@@ -320,6 +320,7 @@ class Ecommerce_orders(http.Controller):
             'auto_delete': True
             })
             template.send_mail(order.id, force_send=True)
+
                 
             return {
                 'status': 'success',
@@ -393,26 +394,26 @@ class Ecommerce_orders(http.Controller):
             shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
             template = request.env['mail.template'].sudo().create({
-            'name': 'Reorder Confirmation',
+            'name': 'Conferma Riordine',
             'email_from': 'admin@primapaint.com', 
             'email_to': new_order.partner_id.email,
-            'subject': f'Reorder #{new_order.name} Confirmed',
+            'subject': f'Riordine #{new_order.name} Confermato',
             'body_html': f'''
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #2C3E50;">Reorder Confirmation</h2>
+                    <h2 style="color: #2C3E50;">Conferma Riordine</h2>
                     
-                    <p>Dear {new_order.partner_id.name},</p>
-                    <p>We've processed your reorder based on your previous order. Details:</p>
+                    <p>Caro/a {new_order.partner_id.name},</p>
+                    <p>Abbiamo elaborato il tuo riordine basato sul tuo ordine precedente. Dettagli:</p>
                     
                     <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                        <p><strong>Order Number:</strong> {new_order.name}</p>
-                        <p><strong>Original Order:</strong> {order.name}</p>
-                        <p><strong>Order Date:</strong> {new_order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
-                        <p><strong>Total Amount:</strong> {new_order.currency_id.symbol}{new_order.amount_total:.2f}</p>
-                        <p><strong>Reward Points Earned:</strong> {order_reward_points}</p>
+                        <p><strong>Numero Ordine:</strong> {new_order.name}</p>
+                        <p><strong>Ordine Originale:</strong> {order.name}</p>
+                        <p><strong>Data Ordine:</strong> {new_order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                        <p><strong>Importo Totale:</strong> {new_order.currency_id.symbol}{new_order.amount_total:.2f}</p>
+                        <p><strong>Punti Premio Ottenuti:</strong> {order_reward_points}</p>
                     </div>
 
-                    <h3 style="color: #2C3E50; margin-top: 20px;">Shipping Address:</h3>
+                    <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
                     <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
                         {user_address.address or ''}, {user_address.continued_address or ''}<br>
                         {user_address.city or ''}, {user_address.postal_code or ''}<br>
@@ -425,6 +426,7 @@ class Ecommerce_orders(http.Controller):
             'auto_delete': True
             })
             template.send_mail(new_order.id, force_send=True)
+
 
             return {
                 'status': 'success',

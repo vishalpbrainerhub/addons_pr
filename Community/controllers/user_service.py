@@ -121,6 +121,7 @@ class Users(http.Controller):
                 template.send_mail(customer.id, force_send=True)
                 
                 return {"status": "error", "message": "Credenziali inviate via email"}
+            
 
             if not password_record.verify_password(password):
                 return {"status": "error", "message": "Credenziali non valide"}

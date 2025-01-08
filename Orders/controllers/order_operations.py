@@ -255,7 +255,6 @@ class Ecommerce_orders(http.Controller):
                 line.sudo().write({'price_unit': price})
 
             order.sudo().action_confirm()
-            order._send_status_email(order.state, 'sale') 
 
             total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
             if total_points > 0:

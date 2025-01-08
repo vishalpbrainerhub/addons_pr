@@ -88,7 +88,7 @@ class Users(http.Controller):
             ], limit=1)
 
             if not customer:
-                return {"status": "error", "message": "Credenziali non valide"}
+                return {"status": "error", "info": "Credenziali non valide"}
 
             password_record = request.env['customer.password'].sudo().search([
                 ('partner_id', '=', customer.id)
@@ -124,7 +124,7 @@ class Users(http.Controller):
             
 
             if not password_record.verify_password(password):
-                return {"status": "error", "message": "Credenziali non valide"}
+                return {"status": "error", "info": "Credenziali non valide"}
 
             payload = {
                 'user_id': customer.id,

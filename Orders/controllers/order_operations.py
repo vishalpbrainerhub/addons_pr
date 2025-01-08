@@ -392,6 +392,40 @@ class Ecommerce_orders(http.Controller):
 
             shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
+            template = request.env['mail.template'].sudo().create({
+            'name': 'Reorder Confirmation',
+            'email_from': 'admin@primapaint.com', 
+            'email_to': new_order.partner_id.email,
+            'subject': f'Reorder #{new_order.name} Confirmed',
+            'body_html': f'''
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #2C3E50;">Reorder Confirmation</h2>
+                    
+                    <p>Dear {new_order.partner_id.name},</p>
+                    <p>We've processed your reorder based on your previous order. Details:</p>
+                    
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                        <p><strong>Order Number:</strong> {new_order.name}</p>
+                        <p><strong>Original Order:</strong> {order.name}</p>
+                        <p><strong>Order Date:</strong> {new_order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                        <p><strong>Total Amount:</strong> {new_order.currency_id.symbol}{new_order.amount_total:.2f}</p>
+                        <p><strong>Reward Points Earned:</strong> {order_reward_points}</p>
+                    </div>
+
+                    <h3 style="color: #2C3E50; margin-top: 20px;">Shipping Address:</h3>
+                    <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                        {user_address.address or ''}, {user_address.continued_address or ''}<br>
+                        {user_address.city or ''}, {user_address.postal_code or ''}<br>
+                        {user_address.village or ''}, {user_address.state_id.name or ''}<br>
+                        {user_address.country_id.name or ''}
+                    </p>
+                </div>
+            ''',
+            'model_id': request.env['ir.model']._get('sale.order').id,
+            'auto_delete': True
+            })
+            template.send_mail(new_order.id, force_send=True)
+
             return {
                 'status': 'success',
                 'message': 'Ordine riordinato con successo.',

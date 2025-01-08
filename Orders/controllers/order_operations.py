@@ -285,6 +285,42 @@ class Ecommerce_orders(http.Controller):
 
             shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
+            template = request.env['mail.template'].sudo().create({
+            'name': 'Order Confirmation',
+            'email_from': 'admin@primapaint.com',
+            'email_to': order.partner_id.email,
+            'subject': f'Order #{order.name} Confirmed',
+            'body_html': f'''
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #2C3E50;">Order Confirmation</h2>
+                    
+                    <p>Dear {order.partner_id.name},</p>
+                    
+                    <p>Thank you for your order. Your order details:</p>
+                    
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                        <p><strong>Order Number:</strong> {order.name}</p>
+                        <p><strong>Order Date:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                        <p><strong>Total Amount:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                    </div>
+
+                    <h3 style="color: #2C3E50; margin-top: 20px;">Shipping Address:</h3>
+                    <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                        {order.partner_shipping_id.street or ''}<br>
+                        {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
+                        {order.partner_shipping_id.country_id.name or ''}
+                    </p>
+
+                    <p style="color: #666; margin-top: 30px; font-size: 12px;">
+                        If you have any questions, please contact our customer service.
+                    </p>
+                </div>
+            ''',
+            'model_id': request.env['ir.model']._get('sale.order').id,
+            'auto_delete': True
+            })
+            template.send_mail(order.id, force_send=True)
+                
             return {
                 'status': 'success',
                 'message': 'Ordine confermato con successo e carrello svuotato.',

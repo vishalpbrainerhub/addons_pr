@@ -106,20 +106,20 @@ class Users(http.Controller):
 
                 # Send email with credentials
                 template = request.env['mail.template'].sudo().create({
-                    'name': 'Customer Credentials',
-                    'email_from': 'admin@primapaint.com',
+                    'name': 'Credenziali Cliente',
+                    'email_from': 'admin@primapaint.com', 
                     'email_to': customer.email,
-                    'subject': 'Your Login Credentials',
+                    'subject': 'Le tue Credenziali di Accesso',
                     'body_html': f'''
-                        <p>Hello {customer.name},</p>
-                        <p>Your login credentials:</p>
+                        <p>Salve {customer.name},</p>
+                        <p>Le tue credenziali di accesso:</p>
                         <p>Email: {customer.email}<br/>
                         Password: {random_password}</p>
                     ''',
                     'model_id': request.env['ir.model']._get('res.partner').id
                 })
                 template.send_mail(customer.id, force_send=True)
-                
+                                
                 return {"status": "error", "message": "Credenziali inviate via email"}
             
 

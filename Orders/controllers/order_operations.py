@@ -288,7 +288,7 @@ class Ecommerce_orders(http.Controller):
             template = request.env['mail.template'].sudo().create({
             'name': 'Conferma Ordine',
             'email_from': 'admin@primapaint.com',
-            'email_to': order.partner_id.email,
+            'email_to': f"{order.partner_id.email}, staff@primapaint.it",
             'subject': f'Ordine #{order.name} Confermato',
             'body_html': f'''
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -395,8 +395,8 @@ class Ecommerce_orders(http.Controller):
 
             template = request.env['mail.template'].sudo().create({
             'name': 'Conferma Riordine',
-            'email_from': 'admin@primapaint.com', 
-            'email_to': new_order.partner_id.email,
+            'email_from': 'admin@primapaint.com',
+            'email_to': f"{new_order.partner_id.email}, staff@primapaint.it",
             'subject': f'Riordine #{new_order.name} Confermato',
             'body_html': f'''
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

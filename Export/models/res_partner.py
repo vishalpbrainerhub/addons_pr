@@ -1,4 +1,4 @@
-# /home/dell/Documents/Projects/PrimaPaint/odoo-15.0/primapaint_addons/Export/models/res_partner.py
+
 
 from odoo import models, fields, api
 
@@ -25,3 +25,24 @@ class ResPartner(models.Model):
         if vals.get('l10n_it_codice_fiscale'):
             vals['l10n_it_codice_fiscale'] = vals['l10n_it_codice_fiscale'].upper()
         return super(ResPartner, self).write(vals)
+    
+
+
+class Partner_External_import_id(models.Model):
+    _name = 'external.import'
+    _description = 'External Import ID'
+    
+    partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
+    external_import_id = fields.Integer(string='External Import ID', required=True)
+    
+    
+    
+class PricelistExternalImport(models.Model):
+    _name = 'external.import.pricelist'
+    _description = 'External Import ID for Pricelist'
+    
+    pricelist_id = fields.Many2one('product.pricelist', string='Pricelist', required=True, ondelete='cascade')
+    external_import_id = fields.Integer(string='External Import ID', required=True)
+    _sql_constraints = [
+        ('unique_pricelist_external_id', 'unique(external_import_id)', 'External Import ID must be unique!')
+    ]

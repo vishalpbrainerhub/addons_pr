@@ -3,3 +3,5 @@ access_order_export_cron,Order Export Cron Access,model_order_export_cron,base.g
 access_partner_import_user,partner.import.user,model_partner_import,base.group_user,1,1,1,1
 access_product_import,product.import.user,model_product_import,base.group_user,1,1,1,1
 access_pricelist_import_user,pricelist.import.user,model_pricelist_import,base.group_user,1,1,1,1
+access_external_import_user,external.import.user,model_external_import,base.group_user,1,1,1,1
+access_external_import_pricelist_user,external.import.pricelist.user,model_external_import_pricelist,base.group_user,1,1,1,1

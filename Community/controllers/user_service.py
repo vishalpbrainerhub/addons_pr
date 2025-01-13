@@ -39,6 +39,34 @@ class Users(http.Controller):
                 ('partner_id', '=', customer.id)
             ], limit=1)
 
+            if not password_record:
+                # Generate random password
+                random_password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+                
+                # Create password record
+                password_record = request.env['customer.password'].sudo().create({
+                    'partner_id': customer.id
+                })
+                password_record.set_password(random_password)
+
+                # Send email with credentials
+                template = request.env['mail.template'].sudo().create({
+                    'name': 'Credenziali Cliente',
+                    'email_from': 'admin@primapaint.com', 
+                    'email_to': customer.email,
+                    'subject': 'Le tue Credenziali di Accesso',
+                    'body_html': f'''
+                        <p>Salve {customer.name},</p>
+                        <p>Le tue credenziali di accesso:</p>
+                        <p>Email: {customer.email}<br/>
+                        Password: {random_password}</p>
+                    ''',
+                    'model_id': request.env['ir.model']._get('res.partner').id
+                })
+                template.send_mail(customer.id, force_send=True)
+                print('Email sent')
+                                
+                return {"status": "error", "message": "Credenziali inviate via email"}
             
 
             if not password_record.verify_password(password):

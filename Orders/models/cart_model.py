@@ -1,6 +1,7 @@
 from odoo import models, fields, api
 
 
+
 class Cart(models.Model):
     _name = 'mobile_ecommerce.cart'
     _description = 'Mobile Ecommerce Cart'
@@ -17,3 +18,12 @@ class SaleOrder(models.Model):
 
     # Fields to store the address directly on the order
     shipping_address_id = fields.Integer(string='Shipping Address ID')
+    
+    # def _create_invoices(self, grouped=False, final=False):
+    #     invoices = super(SaleOrder, self)._create_invoices(grouped=grouped, final=final)
+    #     for invoice in invoices:
+    #         if invoice.state == 'draft':
+    #             invoice.action_post()  # Transition to 'posted'
+    #             print("Action for when the transition in state-------------")  # This will print when the invoice is posted
+    #     return invoices
+    

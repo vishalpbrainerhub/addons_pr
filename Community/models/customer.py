@@ -15,3 +15,12 @@ class CustomerPassword(models.Model):
 
     def verify_password(self, password):
         return self._pwd_context.verify(password, self.password_hash)
+    
+    
+
+class CustomerNotification(models.Model):
+    _name = 'customer.notification'
+    _description = 'Customer Notification'
+
+    partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
+    onesignal_player_id = fields.Char(string='OneSignal Player ID', required=True)

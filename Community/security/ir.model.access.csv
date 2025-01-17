@@ -8,3 +8,4 @@ access_custom_address,social_media.custom_address,model_social_media_custom_addr
 acess_comment_report,social_media.comment_report,model_social_media_comment_report,,1,1,1,1
 access_banner,social_media.banner,model_social_media_banner,,1,1,1,1
 access_customer_password,customer.password,model_customer_password,base.group_user,1,1,1,1
+access_customer_notification,customer.notification,model_customer_notification,base.group_user,1,1,1,1

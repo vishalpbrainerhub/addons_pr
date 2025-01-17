@@ -11,6 +11,7 @@ import datetime
 import random
 import string
 from odoo.exceptions import UserError
+from .notification_service import CustomerController
 
 load_dotenv()
 _logger = logging.getLogger(__name__)
@@ -19,11 +20,15 @@ _logger = logging.getLogger(__name__)
 class Users(http.Controller):
 
     
+    
     @http.route('/user/login', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def login(self):
         try:
             email = request.jsonrequest.get('email')
             password = request.jsonrequest.get('password')
+            device_token = request.jsonrequest.get('device_token')
+            
+            print(email, password, device_token, '-----------------Login request-----------------')
 
             if not email or not password:
                 return {"status": "error", "message": "Email e password sono richieste"}
@@ -78,7 +83,32 @@ class Users(http.Controller):
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }
             token = jwt.encode(payload, 'testing', algorithm='HS256')
-
+            
+            print("----------------------------------device_token----------------------------------", device_token)
+            if device_token:
+                notification_record = request.env['customer.notification'].sudo().search([
+                    ('partner_id', '=', customer.id),
+                    ('onesignal_player_id', '=', device_token)
+                ], limit=1)
+                if not notification_record:
+                    request.env['customer.notification'].sudo().create({
+                        'partner_id': customer.id,
+                        'onesignal_player_id': device_token
+                    })
+                
+                
+            notification = CustomerController()
+            if device_token:
+                
+                response = notification.send_onesignal_notification(
+                    device_token, 
+                    'Accesso eseguito con successo', 
+                    'Login', 
+                    {'type': 'login'}
+                )
+                _logger.info('Login notification result: %s', notification)
+                print(response, '-----------------Notification response-----------------')
+            
             return {
                 "status": "success",
                 "message": "Accesso eseguito con successo",
@@ -98,6 +128,27 @@ class Users(http.Controller):
 
     
      # ---------------------- Done --------------------------------
+    
+    # add get api for test notification
+    @http.route('/user/test-notification', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def test_notification(self):
+        try:
+            player_ids = request.jsonrequest.get('player_ids')
+            message = request.jsonrequest.get('message')
+            title = request.jsonrequest.get('title')
+            data = request.jsonrequest.get('data')
+
+            if not player_ids or not message:
+                return {"status": "error", "message": "Player IDs e messaggio sono richiesti"}
+
+            notification = CustomerController()
+            response = notification.send_onesignal_notification(player_ids, message, title, data)
+            return response
+
+        except Exception as e:
+            _logger.error('Test notification error: %s', str(e))
+            return {"status": "error", "message": "Errore del server", "info": str(e)}
+    
     
     @http.route('/user/forgot-password', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def forgot_password(self):

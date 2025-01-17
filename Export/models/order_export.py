@@ -13,20 +13,21 @@ class OrderExportCron(models.Model):
 
     def _export_orders(self):
         try:
-            # ftp_path = 'root/primapaint'
             out_dir = '/var/lib/odoo/export_data/Out'
             os.makedirs(out_dir, exist_ok=True)
             filename = f'{out_dir}/orders_export.csv'
+            
 
+            # Directly open file in write mode - this overwrites existing file
             SaleOrder = self.env['sale.order'].sudo()
             
             fieldnames = [
                 'order_number',
                 'date_order',
-                'partner_id',
+                'partner_id', 
                 'company_id',
                 'partner_invoice_id',
-                'partner_shipping_id',
+                'partner_shipping_id', 
                 'pricelist_id',
                 'order_line/product_id',
                 'order_line/product_uom_qty',

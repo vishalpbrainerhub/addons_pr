@@ -107,3 +107,47 @@ class NotificationController(http.Controller):
                 'status': 'error',
                 'message': str(e)
             }
+    
+    @http.route('/api/notification_status', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
+    def get_notification_status(self, **kwargs):
+        if request.httprequest.method == 'OPTIONS':
+            return self._handle_options()
+
+        user_auth = SocialMediaAuth.user_auth(self)
+        headers = SocialMediaAuth.get_cors_headers()
+
+        if user_auth.get('status') == 'error':
+            return Response(json.dumps({
+                'status': 'error',
+                'message': user_auth['message']
+            }), content_type='application/json', headers=headers, status=401)
+
+        customer_id = user_auth['user_id']
+
+        try:
+            status = request.env['notification.status'].sudo().search([
+                ('partner_id', '=', customer_id)
+            ], limit=1)
+
+            if not status:
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Notification status not found'
+                }), content_type='application/json', headers=headers, status=404)
+
+            return Response(json.dumps({
+                'status': 'success',
+                'data': {
+                    'id': status.id,
+                    'community': status.community,
+                    'promo': status.promo,
+                    'order': status.order
+                }
+            }), content_type='application/json', headers=headers)
+
+        except Exception as e:
+            _logger.error('Error fetching notification status: %s', str(e))
+            return Response(json.dumps({
+                'status': 'error',
+                'message': str(e)
+            }), content_type='application/json', headers=headers, status=500)

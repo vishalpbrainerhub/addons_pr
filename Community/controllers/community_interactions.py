@@ -75,25 +75,26 @@ class SocialMedia(http.Controller):
                 'partner_id': customer_id
             })
             
-
-            customer = request.env['customer.notification'].sudo().search([('partner_id', '=', customer_id)], limit=1)
-            device_token = customer.onesignal_player_id       
-            if device_token:
-                notification_service.send_onesignal_notification(
-                    device_token,
-                    'Post creato con successo',
-                    'Nuovo post',
-                    {'type': 'new_post'}
-                )
-                
-                request.env['notification.storage'].sudo().create({
-                    'message': 'Post creato con successo',
-                    'patner_id': customer_id,
-                    'title': 'Nuovo post',
-                    'data': {'type': 'new_post'},
-                    'include_player_ids': device_token,
-                    'filter': 'community'
-                })
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', customer_id)], limit=1)
+            if filter_notification.community:
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', customer_id)], limit=1)
+                device_token = customer.onesignal_player_id       
+                if device_token:
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        'Post creato con successo',
+                        'Nuovo post',
+                        {'type': 'new_post'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': 'Post creato con successo',
+                        'patner_id': customer_id,
+                        'title': 'Nuovo post',
+                        'data': {'type': 'new_post'},
+                        'include_player_ids': device_token,
+                        'filter': 'community'
+                    })
                             
             return Response(json.dumps({
                 'status': 'success',
@@ -377,33 +378,35 @@ class SocialMedia(http.Controller):
                 'post_id': post_id
             })
             
-            # post's customer id
-            post_customer_id = request.env['social_media.post'].search([('id', '=', post_id)]).partner_id.id
-            customer = request.env['customer.notification'].sudo().search([('partner_id', '=', post_customer_id)], limit=1)
-            device_token = customer.onesignal_player_id       
-            if device_token:
-                notification_service.send_onesignal_notification(
-                    device_token,
-                    f'{customer_name} Mi piace il tuo post',
-                    'Nuovo like',
-                    {'type': 'new_like'}
-                )
-                
-                request.env['notification.storage'].sudo().create({
-                    'message': f'{customer_name} Mi piace il tuo post',
-                    'patner_id': post_customer_id,
-                    'title': 'Nuovo like',
-                    'data': {'type': 'new_like'},
-                    'include_player_ids': device_token,
-                    'filter': 'community'
-                })
-                
-            return {
-                "status": "success",
-                "message": "Mi piace aggiunto",
-                "info": "Post liked successfully",
-                "like_id": like.id
-            }
+            
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', customer.id)], limit=1)
+            if filter_notification.community:
+                post_customer_id = request.env['social_media.post'].search([('id', '=', post_id)]).partner_id.id
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', post_customer_id)], limit=1)
+                device_token = customer.onesignal_player_id       
+                if device_token:
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        f'{customer_name} Mi piace il tuo post',
+                        'Nuovo like',
+                        {'type': 'new_like'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': f'{customer_name} Mi piace il tuo post',
+                        'patner_id': post_customer_id,
+                        'title': 'Nuovo like',
+                        'data': {'type': 'new_like'},
+                        'include_player_ids': device_token,
+                        'filter': 'community'
+                    })
+                    
+                return {
+                    "status": "success",
+                    "message": "Mi piace aggiunto",
+                    "info": "Post liked successfully",
+                    "like_id": like.id
+                }
 
         except Exception as e:
             return {
@@ -511,26 +514,27 @@ class SocialMedia(http.Controller):
                 'content': content
             })
             
-            # post's customer id
-            post_customer_id = request.env['social_media.post'].search([('id', '=', post_id)]).partner_id.id
-            customer = request.env['customer.notification'].sudo().search([('partner_id', '=', post_customer_id)], limit=1)
-            device_token = customer.onesignal_player_id
-            if device_token:
-                notification_service.send_onesignal_notification(
-                    device_token,
-                    f'{customer_name} ha commentato il tuo post',
-                    'Nuovo commento',
-                    {'type': 'new_comment'}
-                )
-                
-                request.env['notification.storage'].sudo().create({
-                    'message': f'{customer_name} ha commentato il tuo post',
-                    'patner_id': post_customer_id,
-                    'title': 'Nuovo commento',
-                    'data': {'type': 'new_comment'},
-                    'include_player_ids': device_token,
-                    'filter': 'community'
-                })
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', customer.id)], limit=1)
+            if filter_notification.community:
+                post_customer_id = request.env['social_media.post'].search([('id', '=', post_id)]).partner_id.id
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', post_customer_id)], limit=1)
+                device_token = customer.onesignal_player_id
+                if device_token:
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        f'{customer_name} ha commentato il tuo post',
+                        'Nuovo commento',
+                        {'type': 'new_comment'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': f'{customer_name} ha commentato il tuo post',
+                        'patner_id': post_customer_id,
+                        'title': 'Nuovo commento',
+                        'data': {'type': 'new_comment'},
+                        'include_player_ids': device_token,
+                        'filter': 'community'
+                    })
             
             return {
                 "status": "success",
@@ -806,6 +810,7 @@ class SocialMedia(http.Controller):
                 }, 403
 
             comment_id = request.jsonrequest.get('comment_id')
+            customer_name = customer.name
             if not comment_id:
                 return {
                     "status": "error",
@@ -831,6 +836,28 @@ class SocialMedia(http.Controller):
                 'partner_id': customer.id,
                 'comment_id': comment_id
             })
+            
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', customer.id)], limit=1)
+            if filter_notification.community:
+                comment_customer_id = request.env['social_media.comment'].search([('id', '=', comment_id)]).partner_id.id
+                customer_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', comment_customer_id)], limit=1)
+                device_token = customer_notification.onesignal_player_id
+                if device_token:
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        f'{customer_name} Mi piace il tuo commento',
+                        'Nuovo like',
+                        {'type': 'new_comment_like'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': f'{customer_name} Mi piace il tuo commento',
+                        'patner_id': comment_customer_id,
+                        'title': 'Nuovo like',
+                        'data': {'type': 'new_comment_like'},
+                        'include_player_ids': device_token,
+                        'filter': 'community'
+                    })
             return {
                 "status": "success",
                 "message": "Mi piace al commento aggiunto",

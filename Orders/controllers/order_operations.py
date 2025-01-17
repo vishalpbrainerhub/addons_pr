@@ -3,6 +3,12 @@ from odoo.http import request, Response
 import json
 from datetime import datetime
 from .user_authentication import SocialMediaAuth
+from .notification_service import CustomerController
+
+import logging
+_logger = logging.getLogger(__name__)
+
+notification_service = CustomerController()
 
 class Ecommerce_orders(http.Controller):
     
@@ -320,6 +326,9 @@ class Ecommerce_orders(http.Controller):
             'auto_delete': True
             })
             template.send_mail(order.id, force_send=True)
+            
+            
+            
 
                 
             return {

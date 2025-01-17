@@ -47,5 +47,6 @@ class NotificationStatus(models.Model):
     community = fields.Boolean(string='Community', default=True)
     promo = fields.Boolean(string='Promo', default=True)
     order = fields.Boolean(string='Order', default=True)
+    partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
 
     

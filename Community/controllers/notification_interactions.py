@@ -55,3 +55,55 @@ class NotificationController(http.Controller):
                 'status': 'error',
                 'message': str(e)
             }), content_type='application/json', headers=headers, status=500)
+            
+            
+    @http.route('/api/notification_status', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
+    def update_notification_status(self, **post):
+        if request.httprequest.method == 'OPTIONS':
+            return self._handle_options()
+
+        user_auth = SocialMediaAuth.user_auth(self)
+        headers = SocialMediaAuth.get_cors_headers()
+
+        if user_auth.get('status') == 'error':
+            return Response(json.dumps({
+                'status': 'error',
+                'message': user_auth['message']
+            }), content_type='application/json', headers=headers, status=401)
+
+        try:
+            data = json.loads(request.httprequest.data.decode('utf-8'))
+            customer_id = user_auth['user_id']
+            
+            status = request.env['notification.status'].sudo().search([
+                ('partner_id', '=', customer_id)
+            ], limit=1)
+            
+            values = {
+                'community': data.get('community', True),
+                'promo': data.get('promo', True),
+                'order': data.get('order', True),
+                'partner_id': customer_id
+            }
+            
+            if status:
+                status.write(values)
+            else:
+                status = request.env['notification.status'].sudo().create(values)
+
+            return Response(json.dumps({
+                'status': 'success',
+                'data': {
+                    'id': status.id,
+                    'community': status.community,
+                    'promo': status.promo,
+                    'order': status.order
+                }
+            }), content_type='application/json', headers=headers)
+
+        except Exception as e:
+            _logger.error('Error updating notification status: %s', str(e))
+            return Response(json.dumps({
+                'status': 'error',
+                'message': str(e)
+            }), content_type='application/json', headers=headers, status=500)

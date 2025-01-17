@@ -80,7 +80,13 @@ class SocialMedia(http.Controller):
             device_token = customer.onesignal_player_id
             if device_token:
                 print(customer.onesignal_player_id,"-----------customer.onesignal_player_id---------------")
-                notification_service.send_onesignal_notification(device_token, "New post created", "Primapaint community")
+            
+                notification_service.send_onesignal_notification(
+                    device_token,
+                    'Post creato con successo',
+                    'Nuovo post',
+                    {'type': 'new_post'}
+                )
                             
             return Response(json.dumps({
                 'status': 'success',

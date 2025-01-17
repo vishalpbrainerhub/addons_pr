@@ -33,6 +33,7 @@ class NoticationStorage(models.Model):
     _description = 'Notification Storage'
 
     message = fields.Text(string='Message', required=True)
+    patner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     title = fields.Char(string='Title', required=True)
     data = fields.Char(string='Data')
     include_player_ids = fields.Char(string='Include Player IDs', required=True)

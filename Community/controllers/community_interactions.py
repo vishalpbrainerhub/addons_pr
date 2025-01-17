@@ -79,7 +79,6 @@ class SocialMedia(http.Controller):
             customer = request.env['customer.notification'].sudo().search([('partner_id', '=', customer_id)], limit=1)
             device_token = customer.onesignal_player_id       
             if device_token:
-                
                 notification_service.send_onesignal_notification(
                     device_token,
                     'Post creato con successo',
@@ -87,14 +86,14 @@ class SocialMedia(http.Controller):
                     {'type': 'new_post'}
                 )
                 
-                request.env['notification.storage'].create({
+                request.env['notification.storage'].sudo().create({
                     'message': 'Post creato con successo',
+                    'patner_id': customer_id,
                     'title': 'Nuovo post',
                     'data': {'type': 'new_post'},
                     'include_player_ids': device_token,
                     'filter': 'community'
                 })
-                
                             
             return Response(json.dumps({
                 'status': 'success',

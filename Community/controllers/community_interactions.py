@@ -348,6 +348,7 @@ class SocialMedia(http.Controller):
                 }, 403
 
             post_id = request.jsonrequest.get('post_id')
+            customer_name = customer.name
             if not post_id:
                 return {
                     "status": "error",
@@ -383,13 +384,13 @@ class SocialMedia(http.Controller):
             if device_token:
                 notification_service.send_onesignal_notification(
                     device_token,
-                    'Like aggiunto con successo',
+                    f'{customer_name} Mi piace il tuo post',
                     'Nuovo like',
                     {'type': 'new_like'}
                 )
                 
                 request.env['notification.storage'].sudo().create({
-                    'message': 'Like aggiunto con successo',
+                    'message': f'{customer_name} Mi piace il tuo post',
                     'patner_id': post_customer_id,
                     'title': 'Nuovo like',
                     'data': {'type': 'new_like'},
@@ -486,6 +487,7 @@ class SocialMedia(http.Controller):
                 ('id', '=', user_auth['user_id']),
                 ('customer_rank', '>', 0)
             ], limit=1)
+            customer_name = customer.name
 
             if not customer:
                 return {
@@ -508,6 +510,28 @@ class SocialMedia(http.Controller):
                 'post_id': int(post_id),
                 'content': content
             })
+            
+            # post's customer id
+            post_customer_id = request.env['social_media.post'].search([('id', '=', post_id)]).partner_id.id
+            customer = request.env['customer.notification'].sudo().search([('partner_id', '=', post_customer_id)], limit=1)
+            device_token = customer.onesignal_player_id
+            if device_token:
+                notification_service.send_onesignal_notification(
+                    device_token,
+                    f'{customer_name} ha commentato il tuo post',
+                    'Nuovo commento',
+                    {'type': 'new_comment'}
+                )
+                
+                request.env['notification.storage'].sudo().create({
+                    'message': f'{customer_name} ha commentato il tuo post',
+                    'patner_id': post_customer_id,
+                    'title': 'Nuovo commento',
+                    'data': {'type': 'new_comment'},
+                    'include_player_ids': device_token,
+                    'filter': 'community'
+                })
+            
             return {
                 "status": "success",
                 "message": "Commento creato con successo",

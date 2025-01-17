@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime
 from odoo import http, models, fields
 from odoo.http import request, Response
 from .user_authentication import SocialMediaAuth
@@ -9,6 +10,9 @@ from .user_authentication import SocialMediaAuth
 _logger = logging.getLogger(__name__)
 
 class NotificationController(http.Controller):
+    
+    def _serialize_datetime(self, dt):
+        return dt.strftime('%Y-%m-%d %H:%M:%S') if dt else None
     
     @http.route('/api/notifications', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_notifications(self, **kwargs):
@@ -28,7 +32,7 @@ class NotificationController(http.Controller):
 
         try:
             notifications = request.env['notification.storage'].sudo().search([
-                ('patner_id', '=', customer_id)  # Changed from partner_id to patner_id
+                ('patner_id', '=', customer_id)
             ])
 
             data = [{
@@ -37,7 +41,7 @@ class NotificationController(http.Controller):
                 'title': notif.title,
                 'data': notif.data,
                 'filter': notif.filter,
-                'create_date': notif.create_date,
+                'create_date': self._serialize_datetime(notif.create_date),
             } for notif in notifications]
 
             return Response(json.dumps({
@@ -51,5 +55,3 @@ class NotificationController(http.Controller):
                 'status': 'error',
                 'message': str(e)
             }), content_type='application/json', headers=headers, status=500)
-
-

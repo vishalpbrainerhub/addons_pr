@@ -24,3 +24,16 @@ class CustomerNotification(models.Model):
 
     partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     onesignal_player_id = fields.Char(string='OneSignal Player ID', required=True)
+    
+    
+
+    
+class NoticationStorage(models.Model):
+    _name = 'notification.storage'
+    _description = 'Notification Storage'
+
+    message = fields.Text(string='Message', required=True)
+    title = fields.Char(string='Title', required=True)
+    data = fields.Char(string='Data')
+    include_player_ids = fields.Char(string='Include Player IDs', required=True)
+    filter = fields.Char(string='Filter')

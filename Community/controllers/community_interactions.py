@@ -5,15 +5,27 @@ from .shared_utilities import Upload_image, get_user_profile_image_path
 import os
 import json
 import random
+from .notification_service import CustomerController
 import logging
 
 _logger = logging.getLogger(__name__)
+notification_service = CustomerController()
 
 class SocialMedia(http.Controller):
 
     def _handle_options(self):
         headers = SocialMediaAuth.get_cors_headers()
         return request.make_response('', headers=headers)
+    
+    def get_device_token(customer_id):
+        """
+        Get the device token for a customer from the database.
+        Parameters: customer_id (int) - The ID of the customer.
+        Returns: str - The device token of the customer.
+        """
+        customer = request.env['customer.notification'].sudo().search([('partner_id', '=', customer_id)], limit=1)
+        print(customer.onesignal_player_id,"-----------customer.onesignal_player_id---------------")
+        return customer.onesignal_player_id if customer else None
 
     @http.route('/social_media/create_post', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def create_post(self, **post):
@@ -71,7 +83,11 @@ class SocialMedia(http.Controller):
                 'description': description,
                 'partner_id': customer_id
             })
-
+            
+            device_token =  self.get_device_token(customer_id)
+            if device_token:
+                notification_service.send_onesignal_notification(device_token, "New post created", "Primapaint community")
+                        
             return Response(json.dumps({
                 'status': 'success',
                 'post_id': post.id,

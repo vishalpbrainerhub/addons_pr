@@ -28,7 +28,7 @@ class NotificationController(http.Controller):
 
         try:
             notifications = request.env['notification.storage'].sudo().search([
-                ('partner_id', '=', customer_id)
+                ('patner_id', '=', customer_id)  # Changed from partner_id to patner_id
             ])
 
             data = [{

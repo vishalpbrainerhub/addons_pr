@@ -91,7 +91,7 @@ class NotificationController(http.Controller):
             else:
                 status = request.env['notification.status'].sudo().create(values)
 
-            return Response(json.dumps({
+            return {
                 'status': 'success',
                 'data': {
                     'id': status.id,
@@ -99,11 +99,11 @@ class NotificationController(http.Controller):
                     'promo': status.promo,
                     'order': status.order
                 }
-            }), content_type='application/json', headers=headers)
+            }
 
         except Exception as e:
             _logger.error('Error updating notification status: %s', str(e))
-            return Response(json.dumps({
+            return{
                 'status': 'error',
                 'message': str(e)
-            }), content_type='application/json', headers=headers, status=500)
+            }

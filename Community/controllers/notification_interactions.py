@@ -57,7 +57,7 @@ class NotificationController(http.Controller):
             }), content_type='application/json', headers=headers, status=500)
             
             
-    @http.route('/api/notification_status', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
+    @http.route('/api/notification_status', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def update_notification_status(self, **post):
         if request.httprequest.method == 'OPTIONS':
             return self._handle_options()

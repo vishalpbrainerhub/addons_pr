@@ -17,15 +17,6 @@ class SocialMedia(http.Controller):
         headers = SocialMediaAuth.get_cors_headers()
         return request.make_response('', headers=headers)
     
-    def get_device_token(customer_id):
-        """
-        Get the device token for a customer from the database.
-        Parameters: customer_id (int) - The ID of the customer.
-        Returns: str - The device token of the customer.
-        """
-        customer = request.env['customer.notification'].sudo().search([('partner_id', '=', customer_id)], limit=1)
-        print(customer.onesignal_player_id,"-----------customer.onesignal_player_id---------------")
-        return customer.onesignal_player_id if customer else None
 
     @http.route('/social_media/create_post', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def create_post(self, **post):
@@ -84,10 +75,13 @@ class SocialMedia(http.Controller):
                 'partner_id': customer_id
             })
             
-            device_token =  self.get_device_token(customer_id)
+
+            customer = request.env['customer.notification'].sudo().search([('partner_id', '=', customer_id)], limit=1)
+            device_token = customer.onesignal_player_id
             if device_token:
+                print(customer.onesignal_player_id,"-----------customer.onesignal_player_id---------------")
                 notification_service.send_onesignal_notification(device_token, "New post created", "Primapaint community")
-                        
+                            
             return Response(json.dumps({
                 'status': 'success',
                 'post_id': post.id,

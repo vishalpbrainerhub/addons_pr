@@ -84,12 +84,16 @@ class Users(http.Controller):
             }
             token = jwt.encode(payload, 'testing', algorithm='HS256')
             
-            print("----------------------------------device_token----------------------------------", device_token)
+            
             if device_token:
                 notification_record = request.env['customer.notification'].sudo().search([
-                    ('partner_id', '=', customer.id),
-                    ('onesignal_player_id', '=', device_token)
+                    ('partner_id', '=', customer.id)
                 ], limit=1)
+                # update the token
+                if notification_record:
+                    notification_record.write({
+                        'onesignal_player_id': device_token
+                    })
                 if not notification_record:
                     request.env['customer.notification'].sudo().create({
                         'partner_id': customer.id,
@@ -107,7 +111,6 @@ class Users(http.Controller):
                     {'type': 'login'}
                 )
                 _logger.info('Login notification result: %s', notification)
-                print(response, '-----------------Notification response-----------------')
             
             return {
                 "status": "success",

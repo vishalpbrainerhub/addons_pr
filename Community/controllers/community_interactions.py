@@ -77,9 +77,8 @@ class SocialMedia(http.Controller):
             
 
             customer = request.env['customer.notification'].sudo().search([('partner_id', '=', customer_id)], limit=1)
-            device_token = customer.onesignal_player_id
+            device_token = customer.onesignal_player_id       
             if device_token:
-                print(customer.onesignal_player_id,"-----------customer.onesignal_player_id---------------")
             
                 notification_service.send_onesignal_notification(
                     device_token,

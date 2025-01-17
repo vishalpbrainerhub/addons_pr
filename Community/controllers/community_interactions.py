@@ -363,6 +363,7 @@ class SocialMedia(http.Controller):
 
             if already_like:
                 already_like.unlink()
+                
                 return {
                     "status": "success",
                     "message": "Mi piace rimosso",
@@ -374,6 +375,28 @@ class SocialMedia(http.Controller):
                 'partner_id': customer.id,
                 'post_id': post_id
             })
+            
+            # post's customer id
+            post_customer_id = request.env['social_media.post'].search([('id', '=', post_id)]).partner_id.id
+            customer = request.env['customer.notification'].sudo().search([('partner_id', '=', post_customer_id)], limit=1)
+            device_token = customer.onesignal_player_id       
+            if device_token:
+                notification_service.send_onesignal_notification(
+                    device_token,
+                    'Like aggiunto con successo',
+                    'Nuovo like',
+                    {'type': 'new_like'}
+                )
+                
+                request.env['notification.storage'].sudo().create({
+                    'message': 'Like aggiunto con successo',
+                    'patner_id': post_customer_id,
+                    'title': 'Nuovo like',
+                    'data': {'type': 'new_like'},
+                    'include_player_ids': device_token,
+                    'filter': 'community'
+                })
+                
             return {
                 "status": "success",
                 "message": "Mi piace aggiunto",

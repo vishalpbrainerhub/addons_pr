@@ -328,8 +328,28 @@ class Ecommerce_orders(http.Controller):
             template.send_mail(order.id, force_send=True)
             
             
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+            if filter_notification.order:
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                device_token = customer.onesignal_player_id       
+                if device_token:
+                    
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        'Ordine confermato con successo',
+                        'Ordine Confermato',
+                        {'type': 'order_confirmed'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': 'Ordine confermato con successo',
+                        'patner_id': partner_id,
+                        'title': 'Ordine Confermato',
+                        'data': {'type': 'order_confirmed'},
+                        'include_player_ids': device_token,
+                        'filter': 'order'
+                    })
             
-
                 
             return {
                 'status': 'success',
@@ -435,7 +455,28 @@ class Ecommerce_orders(http.Controller):
             'auto_delete': True
             })
             template.send_mail(new_order.id, force_send=True)
-
+            
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+            if filter_notification.order:
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                device_token = customer.onesignal_player_id       
+                if device_token:
+                    
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        'Ordine riordinato con successo',
+                        'Ordine Riordinato',
+                        {'type': 'order_reorder'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': 'Ordine riordinato con successo',
+                        'patner_id': partner_id,
+                        'title': 'Ordine Riordinato',
+                        'data': {'type': 'order_reorder'},
+                        'include_player_ids': device_token,
+                        'filter': 'order'
+                    })
 
             return {
                 'status': 'success',

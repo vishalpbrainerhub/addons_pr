@@ -8,6 +8,7 @@ import random
 from .notification_service import CustomerController
 import logging
 
+
 _logger = logging.getLogger(__name__)
 notification_service = CustomerController()
 
@@ -16,7 +17,7 @@ class SocialMedia(http.Controller):
     def _handle_options(self):
         headers = SocialMediaAuth.get_cors_headers()
         return request.make_response('', headers=headers)
-    
+
 
     @http.route('/social_media/create_post', type='http', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def create_post(self, **post):

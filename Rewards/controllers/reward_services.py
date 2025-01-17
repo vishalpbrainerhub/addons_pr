@@ -2,7 +2,9 @@ from odoo import http
 from odoo.http import request, Response
 import json
 from .user_authentication import SocialMediaAuth
+from .notification_service import CustomerController
 
+notification_service = CustomerController()
 
 class RewardAPIs(http.Controller):
 
@@ -91,6 +93,28 @@ class RewardAPIs(http.Controller):
                 'points': points,
                 'status': 'gain'
             })
+            
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+            if filter_notification.order:
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                device_token = customer.onesignal_player_id       
+                if device_token:
+                    
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        f'{points} Punti guadagnati con successo',
+                        'Punti Guadagnati',
+                        {'type': 'points_earned'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': f'{points} Punti guadagnati con successo',
+                        'patner_id': partner_id,
+                        'title': 'Punti Guadagnati',
+                        'data': {'type': 'points_earned'},
+                        'include_player_ids': device_token,
+                        'filter': 'promo'
+                    })
 
             return {
                 'status': 'success',
@@ -134,7 +158,29 @@ class RewardAPIs(http.Controller):
                 'points': catalog.points,
                 'status': 'redeem'
             })
-
+            
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+            if filter_notification.order:
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                device_token = customer.onesignal_player_id       
+                if device_token:
+                    
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        'Catalogo richiesto con successo',
+                        'Catalogo Richiesto',
+                        {'type': 'catalog_claimed'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': 'Catalogo richiesto con successo',
+                        'patner_id': partner_id,
+                        'title': 'Catalogo Richiesto',
+                        'data': {'type': 'catalog_claimed'},
+                        'include_player_ids': device_token,
+                        'filter': 'promo'
+                    })
+                    
             return {
                 'status': 'success',
                 'message': 'Catalogo richiesto con successo',

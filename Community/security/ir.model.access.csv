@@ -11,3 +11,5 @@ access_customer_password,customer.password,model_customer_password,base.group_us
 access_customer_notification,customer.notification,model_customer_notification,base.group_user,1,1,1,1
 access_notification_storage_user,notification.storage.user,model_notification_storage,base.group_user,1,1,1,1
 access_notification_storage_portal,notification.storage.portal,model_notification_storage,base.group_portal,1,1,1,0
+access_notification_status_user,notification.status.user,model_notification_status,base.group_user,1,1,1,1
+access_notification_status_portal,notification.status.portal,model_notification_status,base.group_portal,1,1,1,0

@@ -36,7 +36,8 @@ class NotificationController(http.Controller):
                 'message': notif.message,
                 'title': notif.title,
                 'data': notif.data,
-                'filter': notif.filter
+                'filter': notif.filter,
+                'create_date': notif.create_date,
             } for notif in notifications]
 
             return Response(json.dumps({

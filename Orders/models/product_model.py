@@ -1,6 +1,6 @@
 from odoo import models, fields, api
 from odoo.http import request
-from controllers.notification_service import CustomerController
+from ..controllers.notification_service import CustomerController
 
 notification_service = CustomerController()
 

@@ -50,27 +50,16 @@ class PromoCode(models.Model):
                 message = f'Nuovo codice promozionale disponibile: {record.name}'
                 title = 'Nuovo Codice Promo'
                 
-                notification_service.send_onesignal_notification(
-                    customer_tokens,
-                    message,
-                    title,
-                    {'type': 'promo'}
-                )
-                
-                # Store notifications
-                for partner_id in partner_ids:
-                    customer = request.env['customer.notification'].sudo().search([
-                        ('partner_id', '=', partner_id)
-                    ], limit=1)
-                    if customer:
-                        request.env['notification.storage'].sudo().create({
-                            'message': message,
-                            'patner_id': partner_id,
-                            'title': title,
-                            'data': "{'type': 'promo'}",
-                            'include_player_ids': customer.onesignal_player_id,
-                            'filter': 'promo'
-                        })
+                for token in customer_tokens:
+                    notification_service.send_onesignal_notification(token, message, title, {'type': 'promo'})
+                    
+                    # store notification
+                    request.env['notification.storage'].sudo().create({
+                        'message': message,
+                        'title': title,
+                        'include_player_ids': token,
+                        'patner_id': partner_ids[0]
+                    })
                         
         return {'type': 'ir.actions.client', 'tag': 'reload'}
     

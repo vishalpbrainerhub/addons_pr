@@ -9,7 +9,8 @@
     "depends": ["base", "product", "sale"],
     "data": [
         "security/ir.model.access.csv",
-        "views/orders_view.xml"
+        "views/orders_view.xml",
+        "views/product_view.xml",
     ],
     "demo": [],
     "installable": True,

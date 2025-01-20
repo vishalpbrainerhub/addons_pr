@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Tree View -->
+        <record id="view_promo_code_tree" model="ir.ui.view">
+            <field name="name">product.promo.code.tree</field>
+            <field name="model">product.promo.code</field>
+            <field name="arch" type="xml">
+                <tree>
+                    <field name="name"/>
+                    <field name="product_id"/>
+                    <field name="discount"/>
+                </tree>
+            </field>
+        </record>
+
+        <!-- Form View -->
+        <record id="view_promo_code_form" model="ir.ui.view">
+            <field name="name">product.promo.code.form</field>
+            <field name="model">product.promo.code</field>
+            <field name="arch" type="xml">
+                <form>
+                    <sheet>
+                        <group>
+                            <field name="name"/>
+                            <field name="product_id"/>
+                            <field name="discount"/>
+                        </group>
+                        <footer>
+                            <button name="submit_promo" string="Submit" type="object" class="btn-primary"/>
+                            <button special="cancel" string="Cancel" class="btn-secondary"/>
+                        </footer>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <!-- Action -->
+        <record id="action_promo_codes" model="ir.actions.act_window">
+            <field name="name">Promotional Codes</field>
+            <field name="res_model">product.promo.code</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+
+        <!-- Menu -->
+        <menuitem id="menu_promo_root" name="Promo Management" sequence="20"/>
+        
+        <menuitem id="menu_promo_codes"
+                  name="Promotional Codes"
+                  action="action_promo_codes"
+                  parent="menu_promo_root"
+                  sequence="10"/>
+    </data>
+</odoo>

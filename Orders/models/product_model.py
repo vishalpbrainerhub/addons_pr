@@ -34,9 +34,14 @@ class PromoCode(models.Model):
             # print(f"Promo Code: {record.name}")
             # print(f"Product: {record.product_id.name}")
             # print(f"Discount: {record.discount}")
-            
+                    
             # send notification to all users
-            notification_service.send_notification(data, f"Promo Code: {record.name}", f"Product: {record.product_id.name}", f"Discount: {record.discount}")
+            notification_service.send_onesignal_notification(
+                data,
+                'Promo Code: ' + record.name,
+                'Promo Code',
+                {'type': 'promo_code'}
+            )
             
             
         return {'type': 'ir.actions.client', 'tag': 'reload'}

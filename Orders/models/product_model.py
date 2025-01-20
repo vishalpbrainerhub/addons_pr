@@ -36,6 +36,7 @@ class PromoCode(models.Model):
             # print(f"Discount: {record.discount}")
                     
             # send notification to all users
+            print(data,"-----------------data---------------------")
             notification_service.send_onesignal_notification(
                 data,
                 'Promo Code: ' + record.name,

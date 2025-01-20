@@ -23,15 +23,52 @@ class PromoCode(models.Model):
     discount = fields.Float(related='product_id.discount', string='Discount', readonly=False)
     active = fields.Boolean(string='Active', default=True)
 
+    # def submit_promo(self):
+        
+    #     for record in self:
+            
+        
+    #         notification_service.send_onesignal_notification_to_all(
+    #             f'Nuovo codice promozionale disponibile: {record.name}',
+    #             'Nuovo Codice Promo', 
+    #             {'type': 'promo'}
+    #         )
+    #     return {'type': 'ir.actions.client', 'tag': 'reload'}
+    
     def submit_promo(self):
-        
         for record in self:
-        
-            notification_service.send_onesignal_notification_to_all(
-                f'Nuovo codice promozionale disponibile: {record.name}',
-                'Nuovo Codice Promo', 
-                {'type': 'promo'}
-            )
+            # Get users who have promo notifications enabled
+            promo_enabled_users = request.env['notification.status'].sudo().search([('promo', '=', True)])
+            partner_ids = promo_enabled_users.mapped('partner_id.id')
+            
+            # Get device tokens for those users
+            customer_tokens = request.env['customer.notification'].sudo().search([
+                ('partner_id', 'in', partner_ids)
+            ]).mapped('onesignal_player_id')
+
+            if customer_tokens:
+                message = f'Nuovo codice promozionale disponibile: {record.name}'
+                title = 'Nuovo Codice Promo'
+                
+                notification_service.send_onesignal_notification_to_all(
+                    message, title, {'type': 'promo'}
+                )
+                
+                # Store notifications
+                for partner_id in partner_ids:
+                    customer = request.env['customer.notification'].sudo().search([
+                        ('partner_id', '=', partner_id)
+                    ], limit=1)
+                    if customer:
+                        request.env['notification.storage'].sudo().create({
+                            'message': message,
+                            'patner_id': partner_id,
+                            'title': title,
+                            'data': "{'type': 'promo'}",
+                            'include_player_ids': customer.onesignal_player_id,
+                            'filter': 'promo'
+                        })
+                        
         return {'type': 'ir.actions.client', 'tag': 'reload'}
     
     def unlink(self):

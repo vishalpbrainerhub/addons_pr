@@ -28,11 +28,10 @@ class PromoCode(models.Model):
         player_ids = users_ids.mapped('onesignal_player_id')
         
         for record in self:
-            notification_service.send_onesignal_notification(
-                player_ids,
+        
+            notification_service.send_onesignal_notification_to_all(
                 'test global', 
                 'test global',
                 {'type': 'test global'}
             )
-                
         return {'type': 'ir.actions.client', 'tag': 'reload'}

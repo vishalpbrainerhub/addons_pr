@@ -24,14 +24,12 @@ class PromoCode(models.Model):
     active = fields.Boolean(string='Active', default=True)
 
     def submit_promo(self):
-        users_ids = request.env['customer.notification'].search([])
-        player_ids = users_ids.mapped('onesignal_player_id')
         
         for record in self:
         
             notification_service.send_onesignal_notification_to_all(
-                'test global', 
-                'test global',
-                {'type': 'test global'}
+                f'New promo code available: {record.name}',
+                'New Promo Code',
+                {'type': 'promo', }
             )
         return {'type': 'ir.actions.client', 'tag': 'reload'}

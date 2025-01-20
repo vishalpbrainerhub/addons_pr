@@ -24,25 +24,15 @@ class PromoCode(models.Model):
     active = fields.Boolean(string='Active', default=True)
 
     def submit_promo(self):
-        # get all users onsignal id from the database
         users_ids = request.env['customer.notification'].search([])
-        data = ["4c44059d-f02c-4ec5-9f90-99b7ee4135eb"]
-        for user in users_ids:
-            data.append(user.onesignal_player_id)
-            
+        player_ids = users_ids.mapped('onesignal_player_id')
+        
         for record in self:
-            # print(f"Promo Code: {record.name}")
-            # print(f"Product: {record.product_id.name}")
-            # print(f"Discount: {record.discount}")
-                    
-            # send notification to all users
-            print(data,"-----------------data---------------------")
             notification_service.send_onesignal_notification(
-                        data,
-                        'test global',
-                        'test global',
-                        {'type': 'test global'}
-                    )
-            
-            
+                player_ids,
+                'test global', 
+                'test global',
+                {'type': 'test global'}
+            )
+                
         return {'type': 'ir.actions.client', 'tag': 'reload'}

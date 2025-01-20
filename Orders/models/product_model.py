@@ -26,15 +26,14 @@ class PromoCode(models.Model):
     def submit_promo(self):
         # get all users onsignal id from the database
         users_ids = request.env['customer.notification'].search([])
-        print("--------------users_ids----------------", users_ids)
         data = []
         for user in users_ids:
-            data.append(user.onsignal_id)
+            data.append(user.onesignal_player_id)
             
         for record in self:
-            print(f"Promo Code: {record.name}")
-            print(f"Product: {record.product_id.name}")
-            print(f"Discount: {record.discount}")
+            # print(f"Promo Code: {record.name}")
+            # print(f"Product: {record.product_id.name}")
+            # print(f"Discount: {record.discount}")
             
             # send notification to all users
             notification_service.send_notification(data, f"Promo Code: {record.name}", f"Product: {record.product_id.name}", f"Discount: {record.discount}")

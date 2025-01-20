@@ -50,8 +50,11 @@ class PromoCode(models.Model):
                 message = f'Nuovo codice promozionale disponibile: {record.name}'
                 title = 'Nuovo Codice Promo'
                 
-                notification_service.send_onesignal_notification_to_all(
-                    message, title, {'type': 'promo'}
+                notification_service.send_onesignal_notification(
+                    customer_tokens,
+                    message,
+                    title,
+                    {'type': 'promo'}
                 )
                 
                 # Store notifications

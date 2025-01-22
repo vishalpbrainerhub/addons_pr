@@ -82,6 +82,7 @@ class Users(http.Controller):
                 'user_id': customer.id,
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }
+            print("----------------------------------------key----------------------------------------",os.environ["JWT_SECRET_KEY"])
             secret_key = os.environ["JWT_SECRET_KEY"]
             token = jwt.encode(payload, secret_key, algorithm='HS256')
             

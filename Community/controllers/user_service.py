@@ -82,7 +82,8 @@ class Users(http.Controller):
                 'user_id': customer.id,
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }
-            token = jwt.encode(payload, 'testing', algorithm='HS256')
+            secret_key = os.environ["JWT_SECRET_KEY"]
+            token = jwt.encode(payload, secret_key, algorithm='HS256')
             
             
             if device_token:
@@ -132,26 +133,7 @@ class Users(http.Controller):
     
      # ---------------------- Done --------------------------------
     
-    # add get api for test notification
-    @http.route('/user/test-notification', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
-    def test_notification(self):
-        try:
-            player_ids = request.jsonrequest.get('player_ids')
-            message = request.jsonrequest.get('message')
-            title = request.jsonrequest.get('title')
-            data = request.jsonrequest.get('data')
 
-            if not player_ids or not message:
-                return {"status": "error", "message": "Player IDs e messaggio sono richiesti"}
-
-            notification = CustomerController()
-            response = notification.send_onesignal_notification(player_ids, message, title, data)
-            return response
-
-        except Exception as e:
-            _logger.error('Test notification error: %s', str(e))
-            return {"status": "error", "message": "Errore del server", "info": str(e)}
-    
     
     @http.route('/user/forgot-password', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def forgot_password(self):

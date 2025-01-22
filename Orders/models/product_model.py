@@ -23,17 +23,6 @@ class PromoCode(models.Model):
     discount = fields.Float(related='product_id.discount', string='Discount', readonly=False)
     active = fields.Boolean(string='Active', default=True)
 
-    # def submit_promo(self):
-        
-    #     for record in self:
-            
-        
-    #         notification_service.send_onesignal_notification_to_all(
-    #             f'Nuovo codice promozionale disponibile: {record.name}',
-    #             'Nuovo Codice Promo', 
-    #             {'type': 'promo'}
-    #         )
-    #     return {'type': 'ir.actions.client', 'tag': 'reload'}
     
     def submit_promo(self):
         for record in self:

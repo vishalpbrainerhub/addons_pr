@@ -4,16 +4,16 @@ import json
 from odoo import http
 from odoo.http import request
 import logging
+import os
 _logger = logging.getLogger(__name__)
 
 
 
 class CustomerController(http.Controller):
     
-    ONESIGNAL_APP_ID = "1803cfbe-6c0d-4be6-af61-63d649cd324d"
-    ONESIGNAL_REST_API_KEY = "os_v2_app_dab47ptmbvf6nl3bmplettjsjvdflb5gfkfeyqmsejilv2xgls2aioyn2escig6jdgbn5hnzj4usqsxtb2g3t2uf6kvnuzfmlmuimoa"
-    ONESIGNAL_API_URL = "https://onesignal.com/api/v1"
-    
+    ONESIGNAL_APP_ID = os.environ["ONESIGNAL_APP_ID"]
+    ONESIGNAL_REST_API_KEY = os.environ["ONESIGNAL_REST_API_KEY"]
+    ONESIGNAL_API_URL = os.environ["ONESIGNAL_API_URL"]
     
    
     

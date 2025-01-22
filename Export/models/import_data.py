@@ -108,7 +108,8 @@ class PartnerImport(models.Model):
         return created_count, skipped_count
 
     def import_partners(self):
-        file_path = '/var/lib/odoo/export_data/In/customer-data.csv'
+        file_path = os.environ["CUSTOMER_DATA_PATH"]
+        
         if not os.path.exists(file_path):
             raise UserError(f"Partner import file not found at {file_path}")
 

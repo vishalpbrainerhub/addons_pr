@@ -183,7 +183,7 @@ class PricelistImport(models.Model):
             return sum(1 for _ in file) - 1
 
     def import_pricelists(self):
-        file_path = '/var/lib/odoo/export_data/In/pricelist_data.csv'
+        file_path = os.environ["PRICELIST_DATA_PATH"]
         if not os.path.exists(file_path):
             raise UserError("Pricelist import file not found")
 

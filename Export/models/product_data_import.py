@@ -142,7 +142,7 @@ class ProductImport(models.Model):
         return created_count, skipped_count
 
     def import_products(self):
-        file_path = '/var/lib/odoo/export_data/In/product-data.csv'
+        file_path = os.environ["PRODUCT_DATA_PATH"]
         if not os.path.exists(file_path):
             raise UserError(f"Product import file not found at {file_path}")
 

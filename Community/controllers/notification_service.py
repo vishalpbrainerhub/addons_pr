@@ -16,6 +16,7 @@ class CustomerController(http.Controller):
     ONESIGNAL_API_URL = os.environ["ONESIGNAL_API_URL"]
     
     def send_onesignal_notification(self, device_tokens, message, title="", data=None):
+        
         headers = {
             "accept": "application/json",
             "Authorization": f"Basic {self.ONESIGNAL_REST_API_KEY}",

@@ -112,7 +112,7 @@ class Users(http.Controller):
                     'Login', 
                     {'type': 'login'}
                 )
-                _logger.info('Login notification result: %s', notification)
+                _logger.info('Login notification result: %s', response)
             
             return {
                 "status": "success",

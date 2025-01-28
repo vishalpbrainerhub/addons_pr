@@ -38,6 +38,7 @@ class NoticationStorage(models.Model):
     data = fields.Char(string='Data')
     include_player_ids = fields.Char(string='Include Player IDs', required=True)
     filter = fields.Char(string='Filter')
+    read_status = fields.Boolean(string='Read Status', default=False)
     
     
 class NotificationStatus(models.Model):

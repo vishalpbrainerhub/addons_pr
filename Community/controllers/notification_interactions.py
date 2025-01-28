@@ -42,6 +42,7 @@ class NotificationController(http.Controller):
                 'data': notif.data,
                 'filter': notif.filter,
                 'create_date': self._serialize_datetime(notif.create_date),
+                'read_status': notif.read_status
             } for notif in notifications]
 
             return Response(json.dumps({
@@ -151,3 +152,72 @@ class NotificationController(http.Controller):
                 'status': 'error',
                 'message': str(e)
             }), content_type='application/json', headers=headers, status=500)
+            
+    @http.route('/api/unread_notifications', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
+    def get_unread_notifications(self, **kwargs):
+        if request.httprequest.method == 'OPTIONS':
+            return self._handle_options()
+
+        user_auth = SocialMediaAuth.user_auth(self)
+        headers = SocialMediaAuth.get_cors_headers()
+
+        if user_auth.get('status') == 'error':
+            return Response(json.dumps({
+                'status': 'error',
+                'message': user_auth['message']
+            }), content_type='application/json', headers=headers, status=401)
+
+        customer_id = user_auth['user_id']
+
+        try:
+            unread_notifications = request.env['notification.storage'].sudo().search_count([
+                ('patner_id', '=', customer_id),
+                ('read_status', '=', False)
+            ])
+
+            return Response(json.dumps({
+                'status': 'success',
+                'data': unread_notifications
+            }), content_type='application/json', headers=headers)
+
+        except Exception as e:
+            _logger.error('Error fetching unread notifications: %s', str(e))
+            return Response(json.dumps({
+                'status': 'error',
+                'message': str(e)
+            }), content_type='application/json', headers=headers, status=500)
+            
+    @http.route('/api/mark_as_read', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
+    def mark_as_read(self, **post):
+        if request.httprequest.method == 'OPTIONS':
+            return self._handle_options()
+
+        user_auth = SocialMediaAuth.user_auth(self)
+        headers = SocialMediaAuth.get_cors_headers()
+
+        if user_auth.get('status') == 'error':
+            return Response(json.dumps({
+                'status': 'error',
+                'message': user_auth['message']
+            }), content_type='application/json', headers=headers, status=401)
+
+        try:
+            data = json.loads(request.httprequest.data.decode('utf-8'))
+            customer_id = user_auth['user_id']
+            
+            request.env['notification.storage'].sudo().search([
+                ('patner_id', '=', customer_id),
+                ('id', 'in', data)
+            ]).write({'read_status': True})
+
+            return {
+                'status': 'success',
+                'message': 'Notifications marked as read'
+            }
+
+        except Exception as e:
+            _logger.error('Error marking notifications as read: %s', str(e))
+            return{
+                'status': 'error',
+                'message': str(e)
+            }

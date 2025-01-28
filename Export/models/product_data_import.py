@@ -5,6 +5,7 @@ import logging
 import os
 from odoo.exceptions import UserError
 import re
+import random
 
 _logger = logging.getLogger(__name__)
 
@@ -92,9 +93,10 @@ class ProductImport(models.Model):
                 category_id = self._get_category_id(env, row.get('category'))
 
                 # Prepare product values
+                code_id_value = random.randint(1000000000000, 9999999999999)
                 product_vals = {
                     'name': row.get('name'),
-                    'code_': row.get('code_'),
+                    'code_': row.get('code_', code_id_value),
                     'list_price': float(row.get('list_price', 0.0)),
                     'sale_ok': str(row.get('sale_ok', 'true')).lower() == 'true',
                     'purchase_ok': str(row.get('purchase_ok', 'true')).lower() == 'true',

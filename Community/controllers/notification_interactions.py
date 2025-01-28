@@ -171,17 +171,16 @@ class NotificationController(http.Controller):
 
         try:
             unread_ids = []
-            unread_notifications = request.env['notification.storage'].sudo().search_count([
+            unread_notifications = request.env['notification.storage'].sudo().search([
                 ('patner_id', '=', customer_id),
                 ('read_status', '=', False)
             ])
-            for notification in unread_notifications:
-                unread_ids.append(notification.id)
-            
+
+            unread_ids = [notification.id for notification in unread_notifications]
 
             return Response(json.dumps({
                 'status': 'success',
-                'data': unread_notifications,
+                'length': len(unread_ids),  
                 'unread_ids': unread_ids,
             }), content_type='application/json', headers=headers)
 
@@ -192,6 +191,8 @@ class NotificationController(http.Controller):
                 'message': str(e)
             }), content_type='application/json', headers=headers, status=500)
             
+            
+            
     @http.route('/api/mark_as_read', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def mark_as_read(self, **post):
         if request.httprequest.method == 'OPTIONS':
@@ -201,10 +202,10 @@ class NotificationController(http.Controller):
         headers = SocialMediaAuth.get_cors_headers()
 
         if user_auth.get('status') == 'error':
-            return Response(json.dumps({
+            return {
                 'status': 'error',
                 'message': user_auth['message']
-            }), content_type='application/json', headers=headers, status=401)
+            }
         try:
             data = json.loads(request.httprequest.data.decode('utf-8'))
             customer_id = user_auth['user_id']
@@ -218,7 +219,6 @@ class NotificationController(http.Controller):
                 if notification.id in notification_ids:
                     notification.write({'read_status': True})
                     
-            
             return {
                 'status': 'success',
                 'message': 'Notifications marked as read'

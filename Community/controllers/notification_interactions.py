@@ -210,15 +210,14 @@ class NotificationController(http.Controller):
             data = json.loads(request.httprequest.data.decode('utf-8'))
             customer_id = user_auth['user_id']
             
-            notification_ids = data.get('notification_ids', [])
+            notification_ids = data.get('data', [])  # Access notification_ids from 'data' key
             
             customer_notifications = request.env['notification.storage'].sudo().search([
                 ('patner_id', '=', customer_id),
+                ('id', 'in', notification_ids)  # Filter notifications by IDs
             ])
-            for notification in customer_notifications:
-                if notification.id in notification_ids:
-                    notification.write({'read_status': True})
-                    
+            customer_notifications.write({'read_status': True})  # Update read_status in bulk
+            
             return {
                 'status': 'success',
                 'message': 'Notifications marked as read'

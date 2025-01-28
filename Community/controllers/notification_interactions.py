@@ -41,7 +41,8 @@ class NotificationController(http.Controller):
                 'title': notif.title,
                 'data': notif.data,
                 'filter': notif.filter,
-                'create_date': self._serialize_datetime(notif.create_date)
+                'create_date': self._serialize_datetime(notif.create_date),
+                'read_status': notif.read_status
             } for notif in notifications]
 
             return Response(json.dumps({
@@ -199,24 +200,24 @@ class NotificationController(http.Controller):
                 'status': 'error',
                 'message': user_auth['message']
             }), content_type='application/json', headers=headers, status=401)
-
         try:
             data = json.loads(request.httprequest.data.decode('utf-8'))
             customer_id = user_auth['user_id']
             
+            notification_ids = data.get('notification_ids', [])
+            
             request.env['notification.storage'].sudo().search([
                 ('patner_id', '=', customer_id),
-                ('id', 'in', data)
+                ('id', 'in', notification_ids)
             ]).write({'read_status': True})
-
+            
             return {
                 'status': 'success',
                 'message': 'Notifications marked as read'
             }
-
         except Exception as e:
             _logger.error('Error marking notifications as read: %s', str(e))
-            return{
+            return {
                 'status': 'error',
                 'message': str(e)
             }

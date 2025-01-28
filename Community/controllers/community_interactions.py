@@ -58,8 +58,7 @@ class SocialMedia(http.Controller):
             
             # Verify this is a valid customer
             customer = request.env['res.partner'].sudo().search([
-                ('id', '=', customer_id),
-                ('customer_rank', '>', 0)
+                ('id', '=', customer_id)
             ], limit=1)
             
             if not customer:
@@ -127,7 +126,7 @@ class SocialMedia(http.Controller):
             if user_auth['status'] == 'error':
                 return Response(json.dumps({
                     "status": "error",
-                    "message": "Non autorizzato",  # Italian for 'Unauthorized'
+                    "message": "Non autorizzato",
                     "info": "The user authentication failed"
                 }), content_type='application/json', status=401, headers={'Access-Control-Allow-Origin': '*'})
 
@@ -136,11 +135,19 @@ class SocialMedia(http.Controller):
             
             # Get current customer's data including blocked customers
             user_data = request.env['res.partner'].sudo().search([
-                ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                ('id', '=', user_auth['user_id'])
             ])
+            
+            # Add validation for user existence
+            if not user_data:
+                return Response(json.dumps({
+                    "status": "error",
+                    "message": "Utente non trovato",  # Italian for 'User not found'
+                    "info": "No user found with the provided credentials"
+                }), content_type='application/json', status=404, headers={'Access-Control-Allow-Origin': '*'})
+                
             user_data = user_data.read(['blocked_customers'])
-            blocked_customers = user_data[0]['blocked_customers']
+            blocked_customers = user_data[0]['blocked_customers'] if user_data else []
 
             # Filter posts and get basic data
             posts_data = [post for post in posts.read(['id', 'image', 'description', 'timestamp', 'partner_id'])
@@ -148,21 +155,20 @@ class SocialMedia(http.Controller):
 
             overall_data = []
             for post in posts_data:
-                if post['partner_id'][0] in blocked_customers:
-                    continue
-
                 # Get customer info
                 user_info = request.env['res.partner'].sudo().search([
                     ('id', '=', post['partner_id'][0]),
-                    ('customer_rank', '>', 0)
+                    
                 ])
                 
+                if not user_info:  # Skip if user not found
+                    continue
+                    
                 profile_image = get_user_profile_image_path(user_info.id)
 
                 post.update({
                     'profile_image': profile_image,
                     'user_name': user_info.name,
-                    
                     'image': post['image'].replace('/mnt/data', '') if post['image'] else None,
                     'timestamp': post['timestamp'].isoformat() if post['timestamp'] else None,
                     'is_liked': bool(request.env['social_media.like'].search([
@@ -186,7 +192,7 @@ class SocialMedia(http.Controller):
             return Response(json.dumps({
                 "result": {
                     "status": "success",
-                    "message": "Operazione riuscita", 
+                    "message": "Operazione riuscita",
                     "posts": overall_data,
                     "info": f"Retrieved {len(overall_data)} posts"
                 }
@@ -195,10 +201,9 @@ class SocialMedia(http.Controller):
         except Exception as e:
             return Response(json.dumps({
                 "status": "error",
-                "message": "Errore del server interno",  # Italian for 'Internal Server Error'
+                "message": "Errore del server interno",
                 "info": str(e)
-            }), content_type='application/json', status=500, headers={'Access-Control-Allow-Origin': '*'})
-            
+            }), content_type='application/json', status=500, headers={'Access-Control-Allow-Origin': '*'})       
         
     @http.route('/images/community/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_image(self, image):
@@ -260,7 +265,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -339,7 +344,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -442,7 +447,7 @@ class SocialMedia(http.Controller):
             for like in likes_data:
                 customer_info = request.env['res.partner'].sudo().search([
                     ('id', '=', like['partner_id'][0]),
-                    ('customer_rank', '>', 0)
+                    
                 ])
                 profile_image = get_user_profile_image_path(customer_info.id)
 
@@ -489,7 +494,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
             customer_name = customer.name
 
@@ -571,7 +576,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -651,7 +656,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -674,7 +679,7 @@ class SocialMedia(http.Controller):
             for comment in comments_data:
                 customer_info = request.env['res.partner'].sudo().search([
                     ('id', '=', comment['partner_id'][0]),
-                    ('customer_rank', '>', 0)
+                    
                 ])
 
                 profile_image = get_user_profile_image_path(customer_info.id)
@@ -730,7 +735,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -800,7 +805,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -894,7 +899,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -919,7 +924,7 @@ class SocialMedia(http.Controller):
             for like in likes_data:
                 customer_info = request.env['res.partner'].sudo().search([
                     ('id', '=', like['partner_id'][0]),
-                    ('customer_rank', '>', 0)
+                    
                 ])
                 like.update({
                     'customer_name': customer_info.name,
@@ -964,7 +969,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:
@@ -992,7 +997,7 @@ class SocialMedia(http.Controller):
             # Fetch the customer to block
             blocked_customer = request.env['res.partner'].sudo().search([
                 ('id', '=', blocked_customer_id),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not blocked_customer:
@@ -1057,7 +1062,7 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                ('customer_rank', '>', 0)
+                
             ], limit=1)
 
             if not customer:

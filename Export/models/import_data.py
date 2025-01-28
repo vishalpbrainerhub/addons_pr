@@ -4,6 +4,7 @@ import logging
 import os
 from odoo.exceptions import UserError
 import random
+import ast
 
 _logger = logging.getLogger(__name__)
 
@@ -24,69 +25,92 @@ class PartnerImport(models.Model):
         })
         password_record.set_password(password)
         
-        template = self.env['mail.template'].sudo().create({
-                    'name': 'Credenziali Cliente',
-                    'email_from': 'admin@primapaint.com',
-                    'email_to': email,
-                    'subject': 'Benvenuto a PrimaPaint - Le tue Credenziali di Accesso',
-                    'body_html': f'''
-                        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-                            
-                            <h1 style="color: #333333; text-align: center; margin-bottom: 20px;">Benvenuto in <span style="color: #007bff;">PrimaPaint</span>!</h1>
-                            
-                            <p style="color: #555555; font-size: 16px; line-height: 1.6;">Gentile <strong>{partner.name}</strong>,</p>
-                            
-                            <p style="color: #555555; font-size: 16px; line-height: 1.6;">Grazie per esserti registrato. Ecco le tue credenziali di accesso:</p>
-                            
-                            <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0;">
-                                <p style="margin: 10px 0; color: #333333;"><strong>Email:</strong> {partner.email}</p>
-                                <p style="margin: 10px 0; color: #333333;"><strong>Password:</strong> {password}</p>
-                            </div>
-                            
-                            <div style="text-align: center; margin: 30px 0;">
-                                <a href="#" style="display: inline-block; background-color: #28a745; color: #ffffff; text-decoration: none; padding: 12px 40px; border-radius: 5px; font-size: 16px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">Scarica la nostra App</a>
-                            </div>
-                            
-                            <p style="color: #777777; font-size: 14px; text-align: center; margin-top: 30px;">
-                                Per qualsiasi domanda, non esitare a contattarci.<br>
-                                <strong>Il team di PrimaPaint</strong>
-                            </p>
-                        </div>
-                    ''',
-                    'model_id': self.env['ir.model']._get('res.partner').id
-                })
-        template.send_mail(partner.id, force_send=True)
+        # template = self.env['mail.template'].sudo().create({
+        #     'name': 'Credenziali Cliente',
+        #     'email_from': 'admin@primapaint.com',
+        #     'email_to': email,
+        #     'subject': 'Benvenuto a PrimaPaint - Le tue Credenziali di Accesso',
+        #     'body_html': f'''
+        #         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+        #             <h1 style="color: #333333; text-align: center; margin-bottom: 20px;">Benvenuto in <span style="color: #007bff;">PrimaPaint</span>!</h1>
+        #             <p style="color: #555555; font-size: 16px; line-height: 1.6;">Gentile <strong>{partner.name}</strong>,</p>
+        #             <p style="color: #555555; font-size: 16px; line-height: 1.6;">Grazie per esserti registrato. Ecco le tue credenziali di accesso:</p>
+        #             <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0;">
+        #                 <p style="margin: 10px 0; color: #333333;"><strong>Email:</strong> {partner.email}</p>
+        #                 <p style="margin: 10px 0; color: #333333;"><strong>Password:</strong> {password}</p>
+        #             </div>
+        #             <div style="text-align: center; margin: 30px 0;">
+        #                 <a href="#" style="display: inline-block; background-color: #28a745; color: #ffffff; text-decoration: none; padding: 12px 40px; border-radius: 5px; font-size: 16px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">Scarica la nostra App</a>
+        #             </div>
+        #             <p style="color: #777777; font-size: 14px; text-align: center; margin-top: 30px;">
+        #                 Per qualsiasi domanda, non esitare a contattarci.<br>
+        #                 <strong>Il team di PrimaPaint</strong>
+        #             </p>
+        #         </div>
+        #     ''',
+        #     'model_id': self.env['ir.model']._get('res.partner').id
+        # })
+        # template.send_mail(partner.id, force_send=True)
 
     def _get_country_id(self, country_name):
         if not country_name:
             return False
-        return self.env['res.country'].search([('name', '=', country_name)], limit=1).id
+        return self.env['res.country'].search([('name', '=ilike', country_name)], limit=1).id
+
+    def _get_pricelist_id(self, pricelist_tuple):
+        """Convert pricelist tuple string to ID"""
+        try:
+            if not pricelist_tuple or pricelist_tuple == 'False':
+                return False
+            pricelist_data = ast.literal_eval(pricelist_tuple)
+            return pricelist_data[0] if isinstance(pricelist_data, tuple) else False
+        except:
+            return False
 
     def _check_external_id(self, external_id):
-        return self.env['external.import'].search([('external_import_id', '=', external_id)], limit=1)
+        """Check if external ID exists in external.import"""
+        existing = self.env['external.import'].search([('external_import_id', '=', external_id)], limit=1)
+        return True if existing else False
 
     def _process_batch(self, batch):
         created_count = 0
         skipped_count = 0
+        processed_ids = set()
         
         for row in batch:
             try:
                 external_id = int(row.get('id', 0))
+                
+                # Skip if already processed in this batch
+                if external_id in processed_ids:
+                    _logger.info(f"Skipping duplicate row in batch with ID: {external_id}")
+                    skipped_count += 1
+                    continue
+                
+                processed_ids.add(external_id)
+                
+                # Check external ID
                 if self._check_external_id(external_id):
                     _logger.info(f"Skipping partner with existing external ID: {external_id}")
                     skipped_count += 1
                     continue
 
+                # Prepare partner values
                 partner_vals = {
                     'name': row.get('name'),
-                    'email': row.get('email'),
+                    'email': row.get('email') if row.get('email') != 'False' else False,
                     'customer_rank': 1,
-                    'vat': row.get('vat'),
-                    'street': row.get('street'),
-                    'city': row.get('city'),
-                    'zip': row.get('zip'),
+                    'vat': row.get('vat') if row.get('vat') != 'False' else False,
+                    'street': row.get('street') if row.get('street') != 'False' else False,
+                    'city': row.get('city') if row.get('city') != 'False' else False,
+                    'zip': row.get('zip') if row.get('zip') != 'False' else False,
                     'country_id': self._get_country_id(row.get('country_id')),
+                    'l10n_it_codice_fiscale': row.get('l10n_it_codice_fiscale') if row.get('l10n_it_codice_fiscale') != 'False' else False,
+                    'property_product_pricelist': self._get_pricelist_id(row.get('property_product_pricelist')),
                 }
+
+                # Remove False values to allow defaults
+                partner_vals = {k: v for k, v in partner_vals.items() if v is not False}
 
                 partner = self.env['res.partner'].with_context(tracking_disable=True).create(partner_vals)
                 
@@ -95,11 +119,10 @@ class PartnerImport(models.Model):
                     'external_import_id': external_id
                 })
 
-                if row.get('email'):
-                    self._send_welcome_email(partner, row['email'])
+                if partner_vals.get('email'):
+                    self._send_welcome_email(partner, partner_vals['email'])
                 
                 created_count += 1
-                self.env.cr.commit()
                 
             except Exception as e:
                 _logger.error(f"Error processing partner row {row}: {str(e)}")
@@ -108,7 +131,8 @@ class PartnerImport(models.Model):
         return created_count, skipped_count
 
     def import_partners(self):
-        file_path = os.environ["CUSTOMER_DATA_PATH"]
+        file_path = os.environ["LOCAL_CUSTOMER_DATA_PATH"]
+        print(file_path,"------------------------------------")
         
         if not os.path.exists(file_path):
             raise UserError(f"Partner import file not found at {file_path}")
@@ -116,6 +140,7 @@ class PartnerImport(models.Model):
         total_created = 0
         total_skipped = 0
         batch_size = 100
+        all_processed_ids = set()  # Track all processed IDs across batches
 
         try:
             with open(file_path, 'r', encoding='utf-8-sig') as file:
@@ -123,7 +148,16 @@ class PartnerImport(models.Model):
                 batch = []
                 
                 for row in reader:
+                    external_id = int(row.get('id', 0))
+                    
+                    # Skip if already processed in previous batches
+                    if external_id in all_processed_ids:
+                        total_skipped += 1
+                        continue
+                        
+                    all_processed_ids.add(external_id)
                     batch.append(row)
+                    
                     if len(batch) >= batch_size:
                         created, skipped = self._process_batch(batch)
                         total_created += created

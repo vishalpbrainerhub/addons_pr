@@ -56,7 +56,6 @@ class SocialMediaAuth(http.Controller):
             # Search for customer instead of user
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', payload['user_id']),
-                ('customer_rank', '>', 0)  # Ensure it's a customer
             ])
             
             if customer:

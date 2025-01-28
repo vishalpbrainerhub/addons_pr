@@ -37,16 +37,16 @@
 
         <!-- Action -->
         <record id="action_promo_codes" model="ir.actions.act_window">
-            <field name="name">Promotional Codes</field>
+            <field name="name">codici promozionali</field>
             <field name="res_model">product.promo.code</field>
             <field name="view_mode">tree,form</field>
         </record>
 
         <!-- Menu -->
-        <menuitem id="menu_promo_root" name="Promo Management" sequence="20"/>
+        <menuitem id="menu_promo_root" name="Gestione Promozionale" sequence="20"/>
         
         <menuitem id="menu_promo_codes"
-                  name="Promotional Codes"
+                  name="codici promozionali"
                   action="action_promo_codes"
                   parent="menu_promo_root"
                   sequence="10"/>

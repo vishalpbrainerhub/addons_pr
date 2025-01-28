@@ -250,7 +250,6 @@ class UsersAuthApi(http.Controller):
         try:
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', customer_id),
-                ('customer_rank', '>', 0)
             ], limit=1)
 
             if not customer:
@@ -322,8 +321,7 @@ class UsersAuthApi(http.Controller):
             image_base64 = base64.b64encode(image_content).decode('utf-8')
 
             customer = request.env['res.partner'].sudo().search([
-                ('id', '=', customer_id),
-                ('customer_rank', '>', 0)
+                ('id', '=', customer_id)
             ], limit=1)
 
             if not customer:

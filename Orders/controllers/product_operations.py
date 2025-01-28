@@ -59,6 +59,7 @@ class MobileEcommerceApiController(http.Controller):
 
         try:
             user_info = SocialMediaAuth.user_auth(self)
+            print("------------------user_info",user_info)
             if user_info['status'] == 'error':
                 return Response(
                     json.dumps({

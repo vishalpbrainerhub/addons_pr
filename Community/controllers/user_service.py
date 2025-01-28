@@ -84,7 +84,6 @@ class Users(http.Controller):
             }
             
             secret_key = os.environ["JWT_SECRET_KEY"]
-            print(secret_key, '-----------------Secret Key-----------------')
             token = jwt.encode(payload, secret_key, algorithm='HS256')
             
             

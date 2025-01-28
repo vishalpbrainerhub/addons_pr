@@ -80,7 +80,7 @@ class Users(http.Controller):
 
             payload = {
                 'user_id': customer.id,
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
             }
             
             secret_key = os.environ["JWT_SECRET_KEY"]
@@ -88,32 +88,49 @@ class Users(http.Controller):
             
             
             if device_token:
+                # Create or update notification record
                 notification_record = request.env['customer.notification'].sudo().search([
                     ('partner_id', '=', customer.id)
                 ], limit=1)
-                # update the token
+                
                 if notification_record:
                     notification_record.write({
                         'onesignal_player_id': device_token
                     })
-                if not notification_record:
+                else:
                     request.env['customer.notification'].sudo().create({
                         'partner_id': customer.id,
                         'onesignal_player_id': device_token
                     })
                 
-                
-            notification = CustomerController()
-            if device_token:
-                
-                response = notification.send_onesignal_notification(
-                    device_token, 
-                    'Accesso eseguito con successo', 
-                    'Login', 
-                    {'type': 'login'}
-                )
-                _logger.info('Login notification result: %s', response)
-            
+                try:
+                    # Create notification instance inside the method
+                    notification = CustomerController()
+                    message = 'Accesso eseguito con successo'
+                    title = 'Login'
+                    
+                    # Send notification
+                    response = notification.send_onesignal_notification(
+                        device_token,
+                        message,
+                        title,
+                        {'type': 'login'}
+                    )
+                    
+                    # Store notification
+                    request.env['notification.storage'].sudo().create({
+                        'message': message,
+                        'title': title,
+                        'include_player_ids': device_token,
+                        'partner_id': customer.id
+                    })
+                    
+                    _logger.info('Login notification sent successfully: %s', response)
+                    
+                except Exception as notification_error:
+                    _logger.error('Notification error during login: %s', str(notification_error))
+                    # Continue with login even if notification fails
+                    
             return {
                 "status": "success",
                 "message": "Accesso eseguito con successo",

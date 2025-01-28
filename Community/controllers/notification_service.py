@@ -15,25 +15,27 @@ class CustomerController(http.Controller):
     ONESIGNAL_REST_API_KEY = os.environ["ONESIGNAL_REST_API_KEY"]
     ONESIGNAL_API_URL = os.environ["ONESIGNAL_API_URL"]
     
+    
+   
+    
     def send_onesignal_notification(self, device_tokens, message, title="", data=None):
-        
         headers = {
             "accept": "application/json",
-            "Authorization": f"Basic {self.ONESIGNAL_REST_API_KEY}",
+            "Authorization": f"Bearer {self.ONESIGNAL_REST_API_KEY}",
             "content-type": "application/json"
         }
+        
         
         notification_payload = {
             "app_id": self.ONESIGNAL_APP_ID,
             "contents": {"en": message},
             "headings": {"en": title},
-            "include_player_ids": [device_tokens] if isinstance(device_tokens, str) else device_tokens,
+            "include_player_ids": [device_tokens],
             "priority": 10,
-            "data": data or {"custom_data": "test_data"}
+            "data": {"custom_data": "test_data"}
         }
 
         try:
-            _logger.info('Sending OneSignal notification: %s', notification_payload)
             response = requests.post(
                 f"{self.ONESIGNAL_API_URL}/notifications",
                 headers=headers,

@@ -134,7 +134,42 @@ class Users(http.Controller):
     
      # ---------------------- Done --------------------------------
     
+    @http.route('/user/register', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
+    def register(self):
+        try:
+            name = request.jsonrequest.get('name')
+            email = request.jsonrequest.get('email')
+            password = request.jsonrequest.get('password')
+            phone = request.jsonrequest.get('phone')
+            company_id = request.jsonrequest.get('company_id')
 
+            if not name or not email or not password or not phone:
+                return {"status": "error", "message": "Tutti i campi sono richiesti"}
+
+            customer = request.env['res.partner'].sudo().search([
+                ('email', '=', email)
+            ], limit=1)
+            if customer:
+                return {"status": "error", "message": "Utente già registrato"}
+
+            customer = request.env['res.partner'].sudo().create({
+                'name': name,
+                'email': email,
+                'phone': phone,
+                'company_id': company_id
+            })
+
+            password_record = request.env['customer.password'].sudo().create({
+                'partner_id': customer.id
+            })
+            password_record.set_password(password)
+
+            return {"status": "success", "message": "Registrazione effettuata con successo"}
+
+        except Exception as e:
+            _logger.error('Registration error: %s', str(e))
+            return {"status": "error", "message": "Errore del server", "info": str(e)}
+    
     
     @http.route('/user/forgot-password', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def forgot_password(self):

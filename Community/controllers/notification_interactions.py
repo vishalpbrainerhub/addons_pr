@@ -170,14 +170,19 @@ class NotificationController(http.Controller):
         customer_id = user_auth['user_id']
 
         try:
+            unread_ids = []
             unread_notifications = request.env['notification.storage'].sudo().search_count([
                 ('patner_id', '=', customer_id),
                 ('read_status', '=', False)
             ])
+            for notification in unread_notifications:
+                unread_ids.append(notification.id)
+            
 
             return Response(json.dumps({
                 'status': 'success',
-                'data': unread_notifications
+                'data': unread_notifications,
+                'unread_ids': unread_ids,
             }), content_type='application/json', headers=headers)
 
         except Exception as e:
@@ -206,10 +211,13 @@ class NotificationController(http.Controller):
             
             notification_ids = data.get('notification_ids', [])
             
-            request.env['notification.storage'].sudo().search([
+            customer_notifications = request.env['notification.storage'].sudo().search([
                 ('patner_id', '=', customer_id),
-                ('id', 'in', notification_ids)
-            ]).write({'read_status': True})
+            ])
+            for notification in customer_notifications:
+                if notification.id in notification_ids:
+                    notification.write({'read_status': True})
+                    
             
             return {
                 'status': 'success',

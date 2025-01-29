@@ -44,6 +44,9 @@ class NotificationController(http.Controller):
                 'create_date': self._serialize_datetime(notif.create_date),
                 'read_status': notif.read_status
             } for notif in notifications]
+            
+            # make data reverse
+            data = data[::-1]
 
             return Response(json.dumps({
                 'status': 'success',

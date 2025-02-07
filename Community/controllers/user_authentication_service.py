@@ -373,8 +373,7 @@ class UsersAuthApi(http.Controller):
             }), content_type='application/json', status=400)
 
         customer = request.env['res.partner'].sudo().search([
-            ('id', '=', customer_id),
-            ('customer_rank', '>', 0)
+            ('id', '=', customer_id)
         ], limit=1)
 
         if not customer:

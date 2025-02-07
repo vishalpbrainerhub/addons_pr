@@ -4,260 +4,334 @@ import logging
 import os
 from odoo.exceptions import UserError
 from datetime import datetime
-from psycopg2.extras import execute_values
+from pytz import UTC
 
 _logger = logging.getLogger(__name__)
-
 
 class PricelistImport(models.Model):
     _name = 'pricelist.import'
     _description = 'Pricelist Import'
 
     name = fields.Char(string='Import Name')
-    last_import_date = fields.Datetime()
-    import_count = fields.Integer(default=0)
-    skipped_count = fields.Integer(default=0)
     state = fields.Selection([
         ('draft', 'Draft'),
-        ('in_progress', 'In Progress'),
+        ('running', 'Running'),
         ('done', 'Done'),
         ('failed', 'Failed')
-    ], default='draft')
-    progress = fields.Float(default=0.0)
-    total_rows = fields.Integer(default=0)
-    processed_rows = fields.Integer(default=0)
-    last_processed_id = fields.Integer(default=0)
-    error_log = fields.Text(string='Error Log')
+    ], default='draft', string='Status')
+    last_import_date = fields.Datetime('Last Import Date')
 
-    def _check_existing_external_ids(self, external_ids):
-        if not external_ids:
-            return set()
+    def _get_pricelist_by_external_id(self, external_id):
+        """Get pricelist by external ID with duplicate handling"""
+        mapping = self.env['external.import.pricelist'].search([
+            ('external_import_id', '=', int(external_id))
+        ], limit=1)
         
-        self.env.cr.execute("""
-            SELECT external_import_id 
-            FROM external_import_pricelist 
-            WHERE external_import_id = ANY(%s)
-        """, (list(external_ids),))
-        
-        return {r[0] for r in self.env.cr.fetchall()}
+        if mapping:
+            # Check if this pricelist still exists
+            if mapping.pricelist_id.exists():
+                return mapping.pricelist_id
+            else:
+                # If pricelist was deleted, remove the mapping
+                mapping.unlink()
+        return False
 
-    def _bulk_insert_pricelists(self, pricelist_vals):
-        query = """
-            INSERT INTO product_pricelist 
-            (name, discount_policy, currency_id, active, create_date, write_date)
-            VALUES %s RETURNING id
-        """
-        params = [(
-            p['name'], 
-            p.get('discount_policy', 'without_discount'),
-            p.get('currency_id', self.env.ref('base.EUR').id),
-            True,
-            datetime.now(), 
-            datetime.now()
-        ) for p in pricelist_vals]
-        
-        execute_values(self.env.cr, query, params, page_size=100)
-        return [r[0] for r in self.env.cr.fetchall()]
-
-    def _bulk_insert_pricelist_items(self, item_vals):
-        query = """
-            INSERT INTO product_pricelist_item
-            (pricelist_id, product_tmpl_id, base, applied_on, compute_price, 
-             min_quantity, fixed_price, percent_price, date_end, create_date, write_date)
-            VALUES %s
-        """
-        params = [(
-            item['pricelist_id'],
-            item['product_tmpl_id'],
-            'list_price',
-            '1_product',
-            item['compute_price'],
-            item.get('min_quantity', 1.0),
-            item.get('fixed_price', 0.0),
-            item.get('percent_price', 0.0),
-            item.get('date_end'),
-            datetime.now(),
-            datetime.now()
-        ) for item in item_vals]
-        
-        execute_values(self.env.cr, query, params, page_size=100)
-
-    def _bulk_insert_external_ids(self, pricelist_ids, external_ids):
-        query = """
-            INSERT INTO external_import_pricelist (pricelist_id, external_import_id)
-            VALUES %s
-        """
-        params = list(zip(pricelist_ids, external_ids))
-        execute_values(self.env.cr, query, params, page_size=100)
-
-    def _process_batch(self, batch, existing_external_ids):
-        created_pricelists = []
-        pricelist_items = []
-        new_external_records = []
-        
-        for row in batch:
-            try:
-                external_id = int(row.get('id', 0))
-                if external_id in existing_external_ids:
-                    continue
-
-                pricelist_vals = {
-                    'name': row['name'],
-                    'discount_policy': row.get('discount_policy', 'without_discount'),
-                }
-                
-                product = self._find_product(row.get('item_idsproduct_tmpl_id'))
-                if not product:
-                    continue
-
-                created_pricelists.append(pricelist_vals)
-                new_external_records.append(external_id)
-
-                compute_price = 'fixed' if row.get('item_idsfixed_price') != 'percentage' else 'percentage'
-                
-                item_vals = {
-                    'compute_price': compute_price,
-                    'product_tmpl_id': product.id,
-                    'min_quantity': float(row.get('item_idsmin_quantity', 1.0))
-                }
-
-                if compute_price == 'percentage' and row.get('item_idsdiscount1'):
-                    item_vals['percent_price'] = -float(row['item_idsdiscount1'])
-                elif row.get('item_idspercent_price'):
-                    item_vals['fixed_price'] = float(row['item_idspercent_price'])
-
-                if row.get('item_idsdate_end'):
-                    item_vals['date_end'] = datetime.strptime(row['item_idsdate_end'], '%Y-%m-%d %H:%M:%S')
-
-                pricelist_items.append(item_vals)
-                
-            except Exception as e:
-                _logger.error(f"Error processing pricelist row {row}: {str(e)}")
-                continue
-
-        if created_pricelists:
-            try:
-                pricelist_ids = self._bulk_insert_pricelists(created_pricelists)
-                
-                for item, pricelist_id in zip(pricelist_items, pricelist_ids):
-                    item['pricelist_id'] = pricelist_id
-                
-                self._bulk_insert_pricelist_items(pricelist_items)
-                self._bulk_insert_external_ids(pricelist_ids, new_external_records)
-                
-                return len(created_pricelists), len(batch) - len(created_pricelists)
-            except Exception as e:
-                _logger.error(f"Error in batch processing: {str(e)}")
-                raise
-
-        return 0, len(batch)
-
-    def _find_product(self, product_tmpl_id):
-        if not product_tmpl_id:
-            return False
-            
+    def _get_or_create_pricelist(self, row):
+        """Get existing pricelist or create new one with duplicate handling"""
         try:
-            external_id = int(product_tmpl_id)
-            product = self.env['product.template'].search([
-                ('external_import_id', '=', external_id)
+            external_id = int(row['id'])
+            name = row.get('name')
+            
+            # First try to find by external ID mapping
+            pricelist = self._get_pricelist_by_external_id(external_id)
+            if pricelist:
+                return pricelist
+                
+            # Then try to find by exact name match
+            existing_pricelist = self.env['product.pricelist'].search([
+                ('name', '=', name)
             ], limit=1)
             
-            if not product:
-                product = self.env['product.template'].search([
-                    '|',
-                    ('code_', '=', str(product_tmpl_id)),
-                    ('name', '=', str(product_tmpl_id))
-                ], limit=1)
+            if existing_pricelist:
+                # Create mapping for future reference
+                self.env['external.import.pricelist'].create({
+                    'pricelist_id': existing_pricelist.id,
+                    'external_import_id': external_id
+                })
+                return existing_pricelist
             
-            return product
+            # If no existing pricelist found, create new one
+            values = self._prepare_pricelist_values(row)
+            new_pricelist = self.env['product.pricelist'].create(values)
             
-        except ValueError:
-            return self.env['product.template'].search([
-                '|',
-                ('code_', '=', str(product_tmpl_id)),
-                ('name', '=', str(product_tmpl_id))
-            ], limit=1)
-
-    def _count_total_rows(self, file_path):
-        with open(file_path, 'r', encoding='utf-8-sig') as file:
-            return sum(1 for _ in file) - 1
-
-    def import_pricelists(self):
-        file_path = os.environ["PRICELIST_DATA_PATH"]
-        if not os.path.exists(file_path):
-            raise UserError("Pricelist import file not found")
-
-        self.write({
-            'state': 'in_progress',
-            'total_rows': self._count_total_rows(file_path),
-            'processed_rows': 0,
-            'progress': 0.0,
-            'error_log': ''
-        })
-
-        total_created = 0
-        total_skipped = 0
-        batch_size = 1000
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
-                batch = []
-                external_ids = set()
-                
-                for row in reader:
-                    batch.append(row)
-                    external_ids.add(int(row.get('id', 0)))
-                    
-                    if len(batch) >= batch_size:
-                        existing_ids = self._check_existing_external_ids(external_ids)
-                        created, skipped = self._process_batch(batch, existing_ids)
-                        
-                        total_created += created
-                        total_skipped += skipped
-                        self.processed_rows += len(batch)
-                        self.progress = (self.processed_rows / self.total_rows) * 100
-                        
-                        self.env.cr.commit()
-                        
-                        batch = []
-                        external_ids = set()
-
-                if batch:
-                    existing_ids = self._check_existing_external_ids(external_ids)
-                    created, skipped = self._process_batch(batch, existing_ids)
-                    total_created += created
-                    total_skipped += skipped
-                    self.processed_rows += len(batch)
-                    self.progress = 100.0
-
-            self.write({
-                'last_import_date': fields.Datetime.now(),
-                'import_count': total_created,
-                'skipped_count': total_skipped,
-                'state': 'done'
+            # Create mapping
+            self.env['external.import.pricelist'].create({
+                'pricelist_id': new_pricelist.id,
+                'external_import_id': external_id
             })
             
+            return new_pricelist
+            
+        except Exception as e:
+            _logger.error(f"Error in _get_or_create_pricelist: {str(e)}")
+            return False
+
+    def _prepare_pricelist_values(self, row):
+        """Prepare pricelist values with additional validation"""
+        name = row.get('name', '').strip()
+        if not name:
+            raise UserError(f"Missing name for pricelist ID {row.get('id')}")
+            
+        return {
+            'name': name,
+            'discount_policy': row.get('discount_policy', 'with_discount'),
+            'active': True,
+        }
+
+    def _find_product_variant(self, product_id, template_id=None):
+        """Enhanced product variant search with better error handling"""
+        if not product_id:
+            return False
+
+        try:
+            variant_id = int(float(product_id))
+            
+            # Direct search by external_product_import_id
+            variant = self.env['product.product'].sudo().search([
+                ('external_product_import_id', '=', variant_id)
+            ], limit=1)
+            
+            if variant:
+                _logger.info(f"Found variant with external_product_import_id: {variant_id}")
+                return variant
+
+            # If template_id provided, search within that template
+            if template_id:
+                template = self.env['product.template'].sudo().search([
+                    ('external_import_id', '=', int(float(template_id)))
+                ], limit=1)
+                if template:
+                    variant = self.env['product.product'].sudo().search([
+                        ('product_tmpl_id', '=', template.id),
+                        '|',
+                        ('default_code', '=', str(variant_id)),
+                        ('id', '=', variant_id)
+                    ], limit=1)
+                    if variant:
+                        _logger.info(f"Found variant through template: {template.id}")
+                        return variant
+
+            # Fallback search
+            variant = self.env['product.product'].sudo().search([
+                '|',
+                ('default_code', '=', str(variant_id)),
+                ('id', '=', variant_id)
+            ], limit=1)
+            
+            if variant:
+                _logger.info(f"Found variant through fallback search: {variant_id}")
+            else:
+                _logger.info(f"No variant found for ID: {variant_id}")
+            
+            return variant
+
+        except Exception as e:
+            _logger.error(f"Error finding product variant: {str(e)}")
+            return False
+
+    def _prepare_pricelist_item_values(self, row, pricelist_id):
+        """Prepare pricelist item values with improved validation"""
+        values = {
+            'pricelist_id': pricelist_id,
+            'min_quantity': float(row.get('item_ids/min_quantity', 0.0) or 0.0),
+            'base': row.get('item_ids/base', 'list_price'),
+            'compute_price': row.get('item_ids/compute_price', 'fixed'),
+        }
+        try:
+            product_found = False
+            template_id = row.get('item_ids/product_tmpl_id')
+            product_id = row.get('item_ids/product_id')
+            original_applied_on = row.get('item_ids/applied_on', '3_global')
+
+            # Try to find variant first
+            if product_id:
+                variant = self._find_product_variant(product_id, template_id)
+                if variant:
+                    values.update({
+                        'product_id': variant.id,
+                        'applied_on': '0_product_variant',
+                        'product_tmpl_id': variant.product_tmpl_id.id
+                    })
+                    product_found = True
+                    _logger.info(f"Set variant {variant.id} for pricelist item")
+
+            # If no variant but template exists
+            if not product_found and template_id:
+                template = self.env['product.template'].sudo().search([
+                    ('external_import_id', '=', int(float(template_id)))
+                ], limit=1)
+                if template:
+                    values.update({
+                        'product_tmpl_id': template.id,
+                        'applied_on': '1_product'
+                    })
+                    product_found = True
+                    _logger.info(f"Set template {template.id} for pricelist item")
+
+            # Default to global if no product found
+            if not product_found:
+                values['applied_on'] = '3_global'
+                if product_id or template_id:
+                    _logger.info(f"""
+                        Product not found:
+                        Template ID: {template_id}
+                        Product ID: {product_id}
+                        Original Applied On: {original_applied_on}
+                    """)
+
+            # Process dates
+            for date_field in ['date_start', 'date_end']:
+                if row.get(f'item_ids/{date_field}'):
+                    try:
+                        date_val = datetime.strptime(row[f'item_ids/{date_field}'], '%Y-%m-%d %H:%M:%S')
+                        values[date_field] = date_val.replace(tzinfo=UTC).strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception as e:
+                        _logger.warning(f"Invalid date format: {row[f'item_ids/{date_field}']}")
+
+            # Process numeric fields
+            numeric_fields = [
+                'fixed_price', 'percent_price', 'price_discount',
+                'price_surcharge', 'price_round', 'price_min_margin', 
+                'price_max_margin'
+            ]
+            for field in numeric_fields:
+                field_key = f'item_ids/{field}'
+                if row.get(field_key):
+                    try:
+                        values[field] = float(row[field_key])
+                    except (ValueError, TypeError):
+                        _logger.warning(f"Invalid numeric value for {field}: {row[field_key]}")
+                        continue
+
+            return values
+
+        except Exception as e:
+            _logger.error(f"Error preparing pricelist item: {str(e)}, Row: {row}")
+            return None
+
+    def import_pricelists(self):
+        """Main import function with improved error handling and recovery"""
+        self.ensure_one()
+        
+        self.write({'state': 'running'})
+        self.env.cr.commit()
+
+        file_path = os.environ.get("LOCAL_PRICELIST_DATA_PATH")
+        if not os.path.exists(file_path):
+            self.write({'state': 'failed'})
+            self.env.cr.commit()
+            raise UserError(f"Import file not found: {file_path}")
+
+        try:
+            with open(file_path, 'r', encoding='utf-8-sig') as file:
+                reader = csv.DictReader(file)
+                data = list(reader)
+
+            # Group data by pricelist ID
+            pricelists_data = {}
+            for row in data:
+                pricelist_id = row['id']
+                if pricelist_id not in pricelists_data:
+                    pricelists_data[pricelist_id] = []
+                pricelists_data[pricelist_id].append(row)
+
+            successful_imports = 0
+            failed_imports = 0
+            total_pricelists = len(pricelists_data)
+            processed_names = set()  # Track processed pricelist names
+
+            _logger.info(f"Starting import of {total_pricelists} pricelists")
+
+            for pricelist_id, rows in pricelists_data.items():
+                try:
+                    pricelist_name = rows[0].get('name', '').strip()
+                    
+                    # Skip if we've already processed this pricelist name
+                    if pricelist_name in processed_names:
+                        _logger.info(f"Skipping duplicate pricelist name: {pricelist_name}")
+                        continue
+                        
+                    pricelist = self._get_or_create_pricelist(rows[0])
+                    if not pricelist:
+                        failed_imports += 1
+                        continue
+
+                    processed_names.add(pricelist_name)
+
+                    valid_items = []
+                    for row in rows:
+                        item_values = self._prepare_pricelist_item_values(row, pricelist.id)
+                        if item_values:
+                            valid_items.append(item_values)
+
+                    if valid_items:
+                        # Remove existing items
+                        pricelist.item_ids.unlink()
+                        # Create new items
+                        self.env['product.pricelist.item'].create(valid_items)
+                        
+                        successful_imports += 1
+                        _logger.info(f"Processed pricelist {pricelist_name} with {len(valid_items)} items")
+                    else:
+                        failed_imports += 1
+                        _logger.error(f"No valid items found for pricelist {pricelist_name}")
+
+                    self.env.cr.commit()
+
+                except Exception as e:
+                    failed_imports += 1
+                    _logger.error(f"Error processing pricelist {pricelist_id}: {str(e)}")
+                    self.env.cr.rollback()
+                    continue
+
+            final_state = 'done' if successful_imports > 0 else 'failed'
+            self.write({
+                'state': final_state,
+                'last_import_date': fields.Datetime.now()
+            })
+            self.env.cr.commit()
+
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
                 'params': {
-                    'title': 'Pricelist Import Complete',
-                    'message': f"Successfully imported {total_created} pricelists. Skipped {total_skipped} existing pricelists.",
-                    'type': 'success',
+                    'title': 'Import Complete',
+                    'message': f'Successfully imported {successful_imports} unique pricelists. Failed: {failed_imports}',
+                    'type': 'success' if successful_imports > 0 else 'warning',
                 }
             }
 
         except Exception as e:
-            error_message = f"Import failed: {str(e)}"
-            _logger.error(error_message)
-            self.write({
-                'state': 'failed',
-                'error_log': error_message
-            })
-            raise UserError(error_message)
+            self.write({'state': 'failed'})
+            self.env.cr.commit()
+            error_msg = f"Import failed: {str(e)}"
+            _logger.error(error_msg)
+            raise UserError(error_msg)
 
     @api.model
     def _run_import_cron(self):
-        import_record = self.search([], limit=1) or self.create({'name': 'Auto Import Pricelists'})
-        return import_record.import_pricelists()
+        """Cron job entry point"""
+        try:
+            import_record = self.search([('state', 'in', ['draft', 'failed'])], limit=1)
+            if not import_record:
+                import_record = self.create({
+                    'name': 'Pricelist Import',
+                    'state': 'draft'
+                })
+                self.env.cr.commit()
+
+            return import_record.with_context(tracking_disable=True).import_pricelists()
+
+        except Exception as e:
+            _logger.error(f"Cron job failed: {str(e)}")
+            return False

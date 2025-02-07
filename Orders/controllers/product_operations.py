@@ -2,49 +2,12 @@ from odoo import http, fields
 from odoo.http import request, Response
 import json
 from .user_authentication import SocialMediaAuth
+# from .helper_functions import get_product_list_price
 
 
 
 class MobileEcommerceApiController(http.Controller):    
-
-    def _get_price_from_pricelist(self, product_template, partner_id, quantity=1.0):
-        """Get price from partner's pricelist"""
-        partner = request.env['res.partner'].sudo().browse(partner_id)
-        base_price = product_template['list_price']
-        
-        base_domain = [
-            ('name', '=', 'property_product_pricelist'),
-            ('res_id', '=', f'res.partner,{partner_id}'),
-            '|',
-            ('company_id', '=', 0), 
-            ('company_id', '=', None)
-        ]
-        
-        pricelist_property = request.env['ir.property'].sudo().search(base_domain, limit=1)
-        if not pricelist_property:
-            return base_price
-            
-        pricelist = request.env['product.pricelist'].sudo().browse(int(pricelist_property.value_reference.split(',')[1]))
-        if not pricelist:
-            return base_price
-
-        pricelist_items = request.env['product.pricelist.item'].sudo().search([
-            ('pricelist_id', '=', pricelist.id),
-            ('product_tmpl_id', '=', product_template['id']),
-            ('min_quantity', '<=', quantity)
-        ], order='min_quantity desc', limit=1)
-
-        if not pricelist_items:
-            return base_price
-
-        item = pricelist_items
-        if item.compute_price == 'fixed':
-            return item.fixed_price
-        elif item.compute_price == 'percentage':
-            return base_price * (1 - item.percent_price / 100)
-        
-        return base_price
-
+    
 
     @http.route('/api/products', auth='none', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_products(self):
@@ -59,7 +22,6 @@ class MobileEcommerceApiController(http.Controller):
 
         try:
             user_info = SocialMediaAuth.user_auth(self)
-            print("------------------user_info",user_info)
             if user_info['status'] == 'error':
                 return Response(
                     json.dumps({
@@ -88,11 +50,9 @@ class MobileEcommerceApiController(http.Controller):
             
             product_list = []
             for product in products_data:
-                price = self._get_price_from_pricelist(
-                    product, 
-                    partner_id,
-                    quantity=cart_lines_map.get(product['id'], 0)
-                )
+                
+                price = 300
+                # get_product_list_price(product['id'], partner_id)
                 
                 image_url = '/web/image/product.template/' + str(product['id']) + '/image_1920' if product['image_1920'] else None
                 

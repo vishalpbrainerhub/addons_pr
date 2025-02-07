@@ -557,4 +557,91 @@ class Ecommerce_orders(http.Controller):
             return {'status': 'error', 'message': 'Si è verificato un errore durante l\'annullamento dell\'ordine.',
                     'info': str(e)}, 500
 
-    
+
+    # @http.route('/api/v1/products/pricelist', type='http', auth='public', methods=['GET'], csrf=False)
+    # def get_products_with_pricelist(self, **kwargs):
+    #     try:
+    #         customer_email = kwargs.get('email')
+    #         if not customer_email:
+    #             return json.dumps({
+    #                 'success': False,
+    #                 'error': 'Customer email is required'
+    #             })
+
+    #         # Find customer
+    #         customer = request.env['res.partner'].sudo().search([
+    #             ('email', '=', customer_email),
+    #             ('active', '=', True)
+    #         ], limit=1)
+
+    #         if not customer:
+    #             return json.dumps({
+    #                 'success': False,
+    #                 'error': 'Customer not found'
+    #             })
+
+    #         # Get active products
+    #         products = request.env['product.template'].sudo().search([
+    #             ('active', '=', True)
+    #         ])
+
+    #         # Get customer's pricelist or default pricelist
+    #         pricelist = customer.property_product_pricelist or request.env['product.pricelist'].sudo().search([], limit=1)
+
+    #         result = []
+    #         for product in products:
+    #             # Get pricelist items for this product
+    #             pricelist_items = request.env['product.pricelist.item'].sudo().search([
+    #                 ('pricelist_id', '=', pricelist.id),
+    #                 ('product_tmpl_id', '=', product.id),
+    #                 ('applied_on', '=', '1_product')
+    #             ], order='min_quantity asc')
+
+    #             # Prepare price data with discounts
+    #             price_data = [{
+    #                 'quantity': 1,
+    #                 'price': product.list_price,
+    #                 'discount_percentage': 0
+    #             }]
+
+    #             # Add prices for each pricelist item
+    #             for item in pricelist_items:
+    #                 price = product.list_price * (1 - (item.percent_price / 100)) if item.compute_price == 'percentage' else item.fixed_price
+    #                 price_data.append({
+    #                     'quantity': item.min_quantity,
+    #                     'price': price,
+    #                     'discount_percentage': item.percent_price if item.compute_price == 'percentage' else 0
+    #                 })
+
+    #             product_data = {
+    #                 'id': product.id,
+    #                 'name': product.name,
+    #                 'default_code': product.default_code,
+    #                 'list_price': product.list_price,
+    #                 'standard_price': product.standard_price,
+    #                 'category': product.categ_id.name,
+    #                 'quantity_pricing': price_data,
+    #                 'currency': pricelist.currency_id.name,
+    #             }
+                
+    #             # Add image if available
+    #             # if product.image_1920:
+    #             #     product_data['image'] = product.image_1920.decode('utf-8') if isinstance(product.image_1920, bytes) else product.image_1920
+
+    #             result.append(product_data)
+    #         return Response(json.dumps({
+    #             'success': True,
+    #             'customer': {
+    #                 'id': customer.id,
+    #                 'name': customer.name,
+    #                 'email': customer.email,
+    #                 'pricelist_name': pricelist.name
+    #             },
+    #             'products': result
+    #         }), content_type='application/json')
+
+    #     except Exception as e:
+    #         return json.dumps({
+    #             'success': False,
+    #             'error': str(e)
+    #         })

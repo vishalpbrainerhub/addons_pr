@@ -1,11 +1,8 @@
-from contextlib import contextmanager
 from odoo import api, models, fields
 import csv
 import logging
 import os
 from odoo.exceptions import UserError
-import re
-import random
 
 _logger = logging.getLogger(__name__)
 
@@ -14,186 +11,187 @@ class ProductImport(models.Model):
     _description = 'Product Import'
 
     name = fields.Char(string='Import Name')
-    last_import_date = fields.Datetime()
-    import_count = fields.Integer(default=0)
-    skipped_count = fields.Integer(default=0)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('running', 'Running'),
+        ('done', 'Done'),
+        ('failed', 'Failed')
+    ], default='draft', string='Status')
+    last_import_date = fields.Datetime('Last Import Date')
 
-    @contextmanager
-    def _get_new_env(self):
-        with self.pool.cursor() as new_cr:
-            yield api.Environment(new_cr, self.env.uid, self.env.context)
-
-    def _validate_code(self, code):
-        """Validate the 13-digit code format"""
-        if not code:
-            return False
-        return bool(re.match(r'^\d{13}$', str(code)))
-
-    def _get_category_id(self, env, category_name):
+    def _get_category_id(self, env, category_str):
         """Get category ID from name, create if doesn't exist"""
-        if not category_name:
-            return 1  # Default to "All" category
-            
-        # Split category path (e.g., "Electronics/Computers")
-        category_path = [cat.strip() for cat in category_name.split('/')]
-        
-        parent_id = 1  # Start from root category
-        category_id = parent_id
-        
-        for category in category_path:
-            if not category:
-                continue
-                
-            domain = [('name', '=', category), ('parent_id', '=', parent_id)]
-            category_obj = env['product.category'].search(domain, limit=1)
-            
-            if not category_obj:
-                # Create new category
-                category_obj = env['product.category'].create({
-                    'name': category,
-                    'parent_id': parent_id
-                })
-                _logger.info(f"Created new product category: {category}")
-                
-            category_id = category_obj.id
-            parent_id = category_id
-            
-        return category_id
+        try:
+            if not category_str:
+                return 1
 
-    def _check_existing_product(self, env, external_import_id):
-        """Check if product exists based on external_import_id"""
-        if external_import_id:
-            return env['product.template'].search([
-                ('external_import_id', '=', external_import_id)
-            ], limit=1)
-        return False
+            # Extract category path from string
+            clean_str = category_str.replace("(", "").replace(")", "").replace("'", "")
+            parts = clean_str.split(",", 1)
+            
+            category_path = ['All']
+            if len(parts) > 1:
+                category_names = [x.strip() for x in parts[1].split('/')]
+                category_path.extend([x for x in category_names if x])
 
-    def _process_batch(self, env, batch):
-        products_to_create = []
-        created_count = 0
-        skipped_count = 0
-        
-        for row in batch:
-            try:
-                # Convert external_import_id to integer
-                external_import_id = False
-                if row.get('id'):
-                    try:
-                        external_import_id = int(row['id'])
-                    except (ValueError, TypeError):
-                        _logger.error(f"Invalid external_import_id format for product {row.get('name')}: {row.get('id')}")
-                        continue
-
-                # Validate code_ format
-                if 'code_' in row and not self._validate_code(row['code_']):
-                    _logger.error(f"Invalid code_ format for product {row.get('name')}: {row.get('code_')}")
+            # Create category hierarchy
+            parent_id = 1
+            for category_name in category_path:
+                if not category_name:
                     continue
 
-                # Get category ID from category name
-                category_id = self._get_category_id(env, row.get('category'))
+                category = env['product.category'].search([
+                    ('name', '=', category_name),
+                    ('parent_id', '=', parent_id)
+                ], limit=1)
 
-                # Prepare product values
-                code_id_value = random.randint(1000000000000, 9999999999999)
-                product_vals = {
-                    'name': row.get('name'),
-                    'code_': row.get('code_', code_id_value),
-                    'list_price': float(row.get('list_price', 0.0)),
-                    'sale_ok': str(row.get('sale_ok', 'true')).lower() == 'true',
-                    'purchase_ok': str(row.get('purchase_ok', 'true')).lower() == 'true',
-                    'categ_id': category_id,
-                    'active': True,
-                    'external_import_id': external_import_id
-                }
+                if not category:
+                    category = env['product.category'].create({
+                        'name': category_name,
+                        'parent_id': parent_id
+                    })
+                    _logger.info(f"Created category: {category_name}")
 
-                # Handle image if present
-                if row.get('image_1920'):
-                    product_vals['image_1920'] = row['image_1920']
+                parent_id = category.id
 
-                # Add optional fields if present
-                optional_fields = ['standard_price', 'weight', 'volume', 'description', 'description_sale']
-                for field in optional_fields:
-                    if row.get(field):
-                        if field in ['standard_price', 'weight', 'volume']:
-                            product_vals[field] = float(row[field])
-                        else:
-                            product_vals[field] = row[field]
+            return parent_id
+        except Exception as e:
+            _logger.error(f"Error creating category {category_str}: {str(e)}")
+            return 1
 
-                # Check if product exists based on external_import_id
-                existing_product = self._check_existing_product(env, external_import_id)
-                
-                if existing_product:
-                    _logger.info(f"Updating existing product: {product_vals.get('name')} "
-                               f"(ID: {existing_product.id}, External ID: {external_import_id})")
-                    existing_product.write(product_vals)
-                    skipped_count += 1
-                else:
-                    products_to_create.append(product_vals)
-                
-            except Exception as e:
-                _logger.error(f"Error processing product row {row}: {str(e)}")
-                continue
+    def _prepare_product_values(self, row, category_id):
+        """Prepare product values dictionary"""
+        values = {
+            'name': row.get('name'),
+            'default_code': str(row.get('id', '')),
+            'code_': str(row.get('id', '')),
+            'list_price': float(row.get('list_price', 0)),
+            'categ_id': category_id,
+            'external_import_id': int(row.get('id', 0)),
+            'sale_ok': True if row.get('sale_ok', '').lower() == 'true' else False,
+            'purchase_ok': True if row.get('purchase_ok', '').lower() == 'true' else False,
+            'active': True
+        }
 
-        if products_to_create:
-            try:
-                env['product.template'].with_context(tracking_disable=True).create(products_to_create)
-                created_count = len(products_to_create)
-            except Exception as e:
-                _logger.error(f"Error creating products: {str(e)}")
-                raise UserError(f"Error creating products: {str(e)}")
+        # Handle image if present in base64 format
+        # image_data = row.get('image_1920')
+        # if image_data:
+        #     try:
+        #         # Clean up the base64 string if needed
+        #         if isinstance(image_data, str):
+        #             values['image_1920'] = image_data
+        #     except Exception as e:
+        #         _logger.error(f"Error processing image for product {row.get('name')}: {str(e)}")
 
-        return created_count, skipped_count
+        return values
 
     def import_products(self):
-        file_path = os.environ["PRODUCT_DATA_PATH"]
-        if not os.path.exists(file_path):
-            raise UserError(f"Product import file not found at {file_path}")
+        """Main import function"""
+        self.ensure_one()
+        
+        # Set initial state
+        self.write({'state': 'running'})
+        self.env.cr.commit()
 
-        total_created = 0
-        total_skipped = 0
-        batch_size = 100
+        file_path = os.environ.get("LOCAL_PRODUCT_DATA_PATH")
+        if not os.path.exists(file_path):
+            self.write({'state': 'failed'})
+            self.env.cr.commit()
+            raise UserError(f"Import file not found: {file_path}")
 
         try:
+            # Read all data first
             with open(file_path, 'r', encoding='utf-8-sig') as file:
                 reader = csv.DictReader(file)
-                batch = []
+                data = list(reader)
+
+            total_count = len(data)
+            processed_count = 0
+            _logger.info(f"Starting import of {total_count} products")
+
+            # Pre-fetch existing products
+            product_template = self.env['product.template'].with_context(active_test=False)
+            existing_products = product_template.search([('default_code', '!=', False)])
+            existing_dict = {str(p.default_code): p.id for p in existing_products if p.default_code}
+
+            # Process in batches
+            batch_size = 1000
+            for i in range(0, total_count, batch_size):
+                batch = data[i:i + batch_size]
+                products_to_create = []
                 
-                for row in reader:
-                    batch.append(row)
-                    if len(batch) >= batch_size:
-                        with self._get_new_env() as new_env:
-                            created, skipped = self._process_batch(new_env, batch)
-                            total_created += created
-                            total_skipped += skipped
-                            new_env.cr.commit()
-                        batch = []
+                for row in batch:
+                    try:
+                        if not row.get('name'):
+                            continue
 
-                if batch:
-                    with self._get_new_env() as new_env:
-                        created, skipped = self._process_batch(new_env, batch)
-                        total_created += created
-                        total_skipped += skipped
-                        new_env.cr.commit()
+                        category_id = self._get_category_id(self.env, row.get('categ_id'))
+                        values = self._prepare_product_values(row, category_id)
+                        code = str(row.get('id', ''))
 
+                        if code in existing_dict:
+                            product_template.browse(existing_dict[code]).write(values)
+                        else:
+                            products_to_create.append(values)
+
+                    except Exception as e:
+                        _logger.error(f"Error processing product {row.get('name')}: {str(e)}")
+                        continue
+
+                # Create new products
+                if products_to_create:
+                    product_template.with_context(
+                        mail_create_nosubscribe=True,
+                        mail_create_nolog=True,
+                        tracking_disable=True,
+                        import_file=True
+                    ).create(products_to_create)
+
+                processed_count += len(batch)
+                _logger.info(f"Processed {processed_count} of {total_count} products")
+                
+                # Commit after each batch
+                self.write({'last_import_date': fields.Datetime.now()})
+                self.env.cr.commit()
+
+            # Final update
             self.write({
-                'last_import_date': fields.Datetime.now(),
-                'import_count': total_created,
-                'skipped_count': total_skipped
+                'state': 'done',
+                'last_import_date': fields.Datetime.now()
             })
-            
+            self.env.cr.commit()
+
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
                 'params': {
-                    'title': 'Product Import Complete',
-                    'message': f"Successfully imported {total_created} products. "
-                              f"Updated {total_skipped} existing products.",
+                    'title': 'Import Complete',
+                    'message': f'Successfully processed {processed_count} products',
                     'type': 'success',
                 }
             }
+
         except Exception as e:
-            raise UserError(f"Import failed: {str(e)}")
+            self.write({'state': 'failed'})
+            self.env.cr.commit()
+            error_msg = f"Import failed: {str(e)}"
+            _logger.error(error_msg)
+            raise UserError(error_msg)
 
     @api.model
     def _run_import_cron(self):
-        import_record = self.search([], limit=1) or self.create({'name': 'Auto Import Products'})
-        return import_record.import_products()
+        """Cron job entry point"""
+        try:
+            import_record = self.search([('state', 'in', ['draft', 'failed'])], limit=1)
+            if not import_record:
+                import_record = self.create({
+                    'name': 'Product Import',
+                    'state': 'draft'
+                })
+                self.env.cr.commit()
+
+            return import_record.with_context(tracking_disable=True).import_products()
+
+        except Exception as e:
+            _logger.error(f"Cron job failed: {str(e)}")
+            return False

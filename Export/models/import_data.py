@@ -1,10 +1,10 @@
-from odoo import models, fields, api
+from odoo import api, models, fields, _
 import csv
 import logging
 import os
 from odoo.exceptions import UserError
-import random
-import ast
+import re
+from contextlib import contextmanager
 
 _logger = logging.getLogger(__name__)
 
@@ -12,182 +12,233 @@ class PartnerImport(models.Model):
     _name = 'partner.import'
     _description = 'Partner Import'
 
-    name = fields.Char(string='Import Name')
+    name = fields.Char(string='Import Name', required=True)
     last_import_date = fields.Datetime()
     import_count = fields.Integer(default=0)
     skipped_count = fields.Integer(default=0)
+    state = fields.Selection([
+        ('draft', 'Draft'),
+        ('in_progress', 'In Progress'),
+        ('done', 'Done'),
+        ('failed', 'Failed')
+    ], default='draft')
+    progress = fields.Float(default=0.0)
+    total_rows = fields.Integer(default=0)
+    processed_rows = fields.Integer(default=0)
+    error_log = fields.Text(string='Error Log')
+    batch_size = fields.Integer(default=1000, string='Batch Size')
 
-    def _send_welcome_email(self, partner, email):
-        """Send welcome email with password"""
-        password = ''.join(random.choices('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', k=8))
-        password_record = self.env['customer.password'].sudo().create({
-            'partner_id': partner.id
-        })
-        password_record.set_password(password)
-        
-        # template = self.env['mail.template'].sudo().create({
-        #     'name': 'Credenziali Cliente',
-        #     'email_from': 'admin@primapaint.com',
-        #     'email_to': email,
-        #     'subject': 'Benvenuto a PrimaPaint - Le tue Credenziali di Accesso',
-        #     'body_html': f'''
-        #         <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-        #             <h1 style="color: #333333; text-align: center; margin-bottom: 20px;">Benvenuto in <span style="color: #007bff;">PrimaPaint</span>!</h1>
-        #             <p style="color: #555555; font-size: 16px; line-height: 1.6;">Gentile <strong>{partner.name}</strong>,</p>
-        #             <p style="color: #555555; font-size: 16px; line-height: 1.6;">Grazie per esserti registrato. Ecco le tue credenziali di accesso:</p>
-        #             <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0;">
-        #                 <p style="margin: 10px 0; color: #333333;"><strong>Email:</strong> {partner.email}</p>
-        #                 <p style="margin: 10px 0; color: #333333;"><strong>Password:</strong> {password}</p>
-        #             </div>
-        #             <div style="text-align: center; margin: 30px 0;">
-        #                 <a href="#" style="display: inline-block; background-color: #28a745; color: #ffffff; text-decoration: none; padding: 12px 40px; border-radius: 5px; font-size: 16px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">Scarica la nostra App</a>
-        #             </div>
-        #             <p style="color: #777777; font-size: 14px; text-align: center; margin-top: 30px;">
-        #                 Per qualsiasi domanda, non esitare a contattarci.<br>
-        #                 <strong>Il team di PrimaPaint</strong>
-        #             </p>
-        #         </div>
-        #     ''',
-        #     'model_id': self.env['ir.model']._get('res.partner').id
-        # })
-        # template.send_mail(partner.id, force_send=True)
+    @contextmanager
+    def _get_new_env(self):
+        """Create a new environment for transaction management."""
+        with api.Environment.manage():
+            with self.pool.cursor() as new_cr:
+                yield api.Environment(new_cr, self.env.uid, self.env.context)
 
-    def _get_country_id(self, country_name):
-        if not country_name:
-            return False
-        return self.env['res.country'].search([('name', '=ilike', country_name)], limit=1).id
-
-    def _get_pricelist_id(self, pricelist_tuple):
-        """Convert pricelist tuple string to ID"""
+    def _extract_pricelist_info(self, pricelist_data):
+        """Extract pricelist name from string format '(id, name)' and remove (EUR) suffix."""
         try:
-            if not pricelist_tuple or pricelist_tuple == 'False':
+            if not pricelist_data or pricelist_data == 'False':
                 return False
-            pricelist_data = ast.literal_eval(pricelist_tuple)
-            return pricelist_data[0] if isinstance(pricelist_data, tuple) else False
-        except:
+            
+            match = re.match(r"\((\d+),\s*'([^']+)'\)", pricelist_data)
+            if match:
+                pl_name = match.group(2)
+                if pl_name.endswith(' (EUR)'):
+                    pl_name = pl_name[:-6]
+                return pl_name
+            
+            return False
+        except Exception as e:
+            _logger.error(f"Error extracting pricelist info: {str(e)}")
             return False
 
-    def _check_external_id(self, external_id):
-        """Check if external ID exists in external.import"""
-        existing = self.env['external.import'].search([('external_import_id', '=', external_id)], limit=1)
-        return True if existing else False
+    def _get_pricelist(self, env, pricelist_data):
+        """Get existing pricelist or return public pricelist."""
+        try:
+            pl_name = self._extract_pricelist_info(pricelist_data)
+            if not pl_name:
+                return env['product.pricelist'].search([('name', '=', 'Public Pricelist')], limit=1).id
 
-    def _process_batch(self, batch):
-        created_count = 0
-        skipped_count = 0
-        processed_ids = set()
-        
-        for row in batch:
+            pricelist = env['product.pricelist'].search([
+                ('name', '=', pl_name)
+            ], limit=1)
+
+            if not pricelist:
+                return env['product.pricelist'].search([('name', '=', 'Public Pricelist')], limit=1).id
+
+            return pricelist.id
+        except Exception as e:
+            _logger.error(f"Error handling pricelist: {str(e)}")
+            return env['product.pricelist'].search([('name', '=', 'Public Pricelist')], limit=1).id
+
+    def _prepare_partner_data(self, env, partner_data):
+        """Prepare partner data with pricelist."""
+        try:
+            vals = {
+                'name': partner_data['name'].strip('"'),
+                'email': partner_data['email'] if partner_data['email'] != 'False' else False,
+                'vat': partner_data['vat'] if partner_data['vat'] != 'False' else False,
+                'street': partner_data['street'] if partner_data['street'] != 'False' else False,
+                'city': partner_data['city'] if partner_data['city'] != 'False' else False,
+                'zip': partner_data['zip'] if partner_data['zip'] != 'False' else False,
+                'l10n_it_codice_fiscale': partner_data['l10n_it_codice_fiscale'] if partner_data['l10n_it_codice_fiscale'] != 'False' else False,
+            }
+
+            if partner_data.get('country_id') and partner_data['country_id'] != 'False':
+                country = env['res.country'].search([('name', '=', partner_data['country_id'])], limit=1)
+                if country:
+                    vals['country_id'] = country.id
+
+            if partner_data.get('property_product_pricelist'):
+                pricelist_id = self._get_pricelist(env, partner_data['property_product_pricelist'])
+                if pricelist_id:
+                    vals['property_product_pricelist'] = pricelist_id
+
+            return vals
+        except Exception as e:
+            _logger.error(f"Error preparing partner data: {str(e)}")
+            return False
+
+    def _process_batch(self, env, batch_data):
+        """Process a batch of partner records."""
+        batch_results = {
+            'created': 0,
+            'updated': 0,
+            'errors': []
+        }
+
+        for partner_data in batch_data:
             try:
-                external_id = int(row.get('id', 0))
-                
-                # Skip if already processed in this batch
-                if external_id in processed_ids:
-                    _logger.info(f"Skipping duplicate row in batch with ID: {external_id}")
-                    skipped_count += 1
-                    continue
-                
-                processed_ids.add(external_id)
-                
-                # Check external ID
-                if self._check_external_id(external_id):
-                    _logger.info(f"Skipping partner with existing external ID: {external_id}")
-                    skipped_count += 1
+                vals = self._prepare_partner_data(env, partner_data)
+                if not vals:
+                    batch_results['errors'].append(f"Failed to prepare data for partner {partner_data.get('name')}")
                     continue
 
-                # Prepare partner values
-                partner_vals = {
-                    'name': row.get('name'),
-                    'email': row.get('email') if row.get('email') != 'False' else False,
-                    'customer_rank': 1,
-                    'vat': row.get('vat') if row.get('vat') != 'False' else False,
-                    'street': row.get('street') if row.get('street') != 'False' else False,
-                    'city': row.get('city') if row.get('city') != 'False' else False,
-                    'zip': row.get('zip') if row.get('zip') != 'False' else False,
-                    'country_id': self._get_country_id(row.get('country_id')),
-                    'l10n_it_codice_fiscale': row.get('l10n_it_codice_fiscale') if row.get('l10n_it_codice_fiscale') != 'False' else False,
-                    'property_product_pricelist': self._get_pricelist_id(row.get('property_product_pricelist')),
-                }
-
-                # Remove False values to allow defaults
-                partner_vals = {k: v for k, v in partner_vals.items() if v is not False}
-
-                partner = self.env['res.partner'].with_context(tracking_disable=True).create(partner_vals)
+                domain = []
+                if vals.get('vat'):
+                    domain.append(('vat', '=', vals['vat']))
+                if vals.get('l10n_it_codice_fiscale'):
+                    domain.append(('l10n_it_codice_fiscale', '=', vals['l10n_it_codice_fiscale']))
                 
-                self.env['external.import'].create({
-                    'partner_id': partner.id,
-                    'external_import_id': external_id
-                })
+                if domain:
+                    domain = ['|'] * (len(domain) - 1) + domain
+                    partner = env['res.partner'].search(domain, limit=1)
+                else:
+                    partner = False
 
-                if partner_vals.get('email'):
-                    self._send_welcome_email(partner, partner_vals['email'])
-                
-                created_count += 1
-                
+                if partner:
+                    partner.write(vals)
+                    batch_results['updated'] += 1
+                else:
+                    env['res.partner'].create(vals)
+                    batch_results['created'] += 1
+
             except Exception as e:
-                _logger.error(f"Error processing partner row {row}: {str(e)}")
-                continue
+                batch_results['errors'].append(f"Error processing partner {partner_data.get('name')}: {str(e)}")
+                _logger.error(f"Batch processing error: {str(e)}", exc_info=True)
 
-        return created_count, skipped_count
+        return batch_results
 
     def import_partners(self):
-        file_path = os.environ["LOCAL_CUSTOMER_DATA_PATH"]
-        print(file_path,"------------------------------------")
-        
-        if not os.path.exists(file_path):
-            raise UserError(f"Partner import file not found at {file_path}")
+        """Main import method with batch processing."""
+        file_path = os.environ.get("LOCAL_CUSTOMER_DATA_PATH")
+        if not file_path or not os.path.exists(file_path):
+            raise UserError(_("Partner data file not found"))
 
-        total_created = 0
-        total_skipped = 0
-        batch_size = 100
-        all_processed_ids = set()  # Track all processed IDs across batches
+        self.write({
+            'state': 'in_progress',
+            'progress': 0.0,
+            'error_log': '',
+        })
 
         try:
-            with open(file_path, 'r', encoding='utf-8-sig') as file:
-                reader = csv.DictReader(file)
-                batch = []
+            # Count total rows
+            with open(file_path, 'r', encoding='utf-8-sig') as f:
+                total_rows = sum(1 for row in f) - 1  # Subtract header row
+            
+            self.write({'total_rows': total_rows})
+
+            # Initialize counters
+            processed = 0
+            total_created = 0
+            total_updated = 0
+            all_errors = []
+            current_batch = []
+
+            # Process in batches
+            with open(file_path, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
                 
                 for row in reader:
-                    external_id = int(row.get('id', 0))
+                    current_batch.append(row)
                     
-                    # Skip if already processed in previous batches
-                    if external_id in all_processed_ids:
-                        total_skipped += 1
-                        continue
-                        
-                    all_processed_ids.add(external_id)
-                    batch.append(row)
-                    
-                    if len(batch) >= batch_size:
-                        created, skipped = self._process_batch(batch)
-                        total_created += created
-                        total_skipped += skipped
-                        batch = []
+                    # Process batch when it reaches the batch size
+                    if len(current_batch) >= self.batch_size:
+                        with self._get_new_env() as new_env:
+                            batch_results = self._process_batch(new_env, current_batch)
+                            
+                            total_created += batch_results['created']
+                            total_updated += batch_results['updated']
+                            all_errors.extend(batch_results['errors'])
+                            
+                            processed += len(current_batch)
+                            self.write({
+                                'processed_rows': processed,
+                                'progress': (processed / total_rows * 100) if total_rows else 0
+                            })
+                            self.env.cr.commit()
+                            
+                        current_batch = []  # Reset batch
 
-                if batch:
-                    created, skipped = self._process_batch(batch)
-                    total_created += created
-                    total_skipped += skipped
+                # Process remaining records
+                if current_batch:
+                    with self._get_new_env() as new_env:
+                        batch_results = self._process_batch(new_env, current_batch)
+                        total_created += batch_results['created']
+                        total_updated += batch_results['updated']
+                        all_errors.extend(batch_results['errors'])
+                        processed += len(current_batch)
 
+            # Update final status
+            final_state = 'done' if not all_errors else 'failed'
             self.write({
+                'state': final_state,
                 'last_import_date': fields.Datetime.now(),
-                'import_count': total_created,
-                'skipped_count': total_skipped
+                'import_count': total_created + total_updated,
+                'skipped_count': len(all_errors),
+                'error_log': '\n'.join(all_errors) if all_errors else '',
+                'processed_rows': processed,
+                'progress': 100.0
             })
-            
+
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
                 'params': {
-                    'title': 'Partner Import Complete',
-                    'message': f"Successfully imported {total_created} partners. Skipped {total_skipped} existing partners.",
-                    'type': 'success',
+                    'title': _('Import Complete'),
+                    'message': _(
+                        'Processed %(total)d partners: %(created)d created, %(updated)d updated, %(failed)d failed'
+                    ) % {
+                        'total': processed,
+                        'created': total_created,
+                        'updated': total_updated,
+                        'failed': len(all_errors)
+                    },
+                    'type': 'success' if not all_errors else 'warning',
+                    'sticky': True,
                 }
             }
+
         except Exception as e:
-            raise UserError(f"Import failed: {str(e)}")
+            self.write({
+                'state': 'failed',
+                'error_log': str(e)
+            })
+            raise UserError(_("Import failed: %s") % str(e))
 
     @api.model
     def _run_import_cron(self):
-        import_record = self.search([], limit=1) or self.create({'name': 'Auto Import Partners'})
+        """Cron job entry point."""
+        import_record = self.search([], limit=1) or self.create({'name': 'Auto Import'})
         return import_record.import_partners()

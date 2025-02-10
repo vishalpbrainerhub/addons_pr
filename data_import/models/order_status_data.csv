@@ -1,0 +1,91 @@
+"mobile_app_order_ref","id","name","state","note"
+"45","135574","OV/25/000488","sale",""
+"43","135577","OV/25/000491","sale",""
+"41","135578","OV/25/000492","sale",""
+"40","135579","OV/25/000493","sale",""
+"37","135583","OV/25/000497","sale",""
+"26","135593","OV/25/000507","sale",""
+"47","135617","OV/25/000510","sale",""
+"46","135618","OV/25/000511","sale",""
+"44","588","","error","Aziende non compatibili nei record:
+- 'OV/25/000592 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"42","589","","error","Il record non esiste oppure è stato eliminato.
+(Record: product.product(3,), Utente: 1)"
+"39","590","","error","Il record non esiste oppure è stato eliminato.
+(Record: product.product(3,), Utente: 1)"
+"38","591","","error","Il record non esiste oppure è stato eliminato.
+(Record: product.product(3,), Utente: 1)"
+"34","592","","error","Il record non esiste oppure è stato eliminato.
+(Record: product.product(3,), Utente: 1)"
+"33","595","","error","Aziende non compatibili nei record:
+- 'OV/25/000599 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"32","596","","error","Aziende non compatibili nei record:
+- 'OV/25/000600 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"31","597","","error","Aziende non compatibili nei record:
+- 'OV/25/000601 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"30","598","","error","Aziende non compatibili nei record:
+- 'OV/25/000602 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"29","599","","error","Aziende non compatibili nei record:
+- 'OV/25/000603 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"28","600","","error","Aziende non compatibili nei record:
+- 'OV/25/000604 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"27","601","","error","Aziende non compatibili nei record:
+- 'OV/25/000605 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"25","602","","error","Aziende non compatibili nei record:
+- 'OV/25/000606 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"36","593","","error","Aziende non compatibili nei record:
+- 'OV/25/000597 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"24","603","","error","Aziende non compatibili nei record:
+- 'OV/25/000607 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"21","604","","error","Aziende non compatibili nei record:
+- 'OV/24/031806 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"22","605","","error","Aziende non compatibili nei record:
+- 'OV/24/031807 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"20","606","","error","Aziende non compatibili nei record:
+- 'OV/24/031808 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"19","607","","error","Aziende non compatibili nei record:
+- 'OV/24/031809 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"18","608","","error","Aziende non compatibili nei record:
+- 'OV/24/031810 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"17","609","","error","Aziende non compatibili nei record:
+- 'OV/24/031811 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031811 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"16","610","","error","Aziende non compatibili nei record:
+- 'OV/24/031812 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031812 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"14","611","","error","Aziende non compatibili nei record:
+- 'OV/24/031813 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031813 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"35","594","","error","Aziende non compatibili nei record:
+- 'OV/25/000598 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"13","612","","error","Aziende non compatibili nei record:
+- 'OV/24/031814 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"12","613","","error","Aziende non compatibili nei record:
+- 'OV/24/031815 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"6","619","","error","Aziende non compatibili nei record:
+- 'OV/24/031821 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"11","614","","error","Aziende non compatibili nei record:
+- 'OV/24/031816 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031816 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"10","615","","error","Aziende non compatibili nei record:
+- 'OV/24/031817 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031817 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"9","616","","error","Aziende non compatibili nei record:
+- 'OV/24/031818 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031818 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"8","617","","error","Aziende non compatibili nei record:
+- 'OV/24/031819 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031819 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"7","618","","error","Aziende non compatibili nei record:
+- 'OV/24/031820 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda.
+- 'OV/24/031820 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"5","620","","error","Aziende non compatibili nei record:
+- 'OV/24/031822 - MERCE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'MERCE') appartiene a un'altra azienda."
+"4","621","","error","Aziende non compatibili nei record:
+- 'OV/24/031823 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"3","622","","error","Il record non esiste oppure è stato eliminato.
+(Record: product.product(3,), Utente: 1)"
+"2","623","","error","Aziende non compatibili nei record:
+- 'OV/24/031825 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."
+"1","624","","error","Aziende non compatibili nei record:
+- 'OV/24/031826 - VARIE' appartiene all'azienda 'Primapaint Srl' e 'Prodotto' (product_id: 'VARIE') appartiene a un'altra azienda."

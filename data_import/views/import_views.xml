@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Data Importer Form View -->
+    <record id="view_data_importer_form" model="ir.ui.view">
+        <field name="name">data.importer.form</field>
+        <field name="model">data.importer</field>
+        <field name="arch" type="xml">
+            <form string="Import Data">
+                <header>
+                    <button string="Import All Data" name="import_all_data" type="object" class="oe_highlight"/>
+                    <button string="Import Products" name="import_products" type="object" class="btn-primary"/>
+                    <button string="Import Pricelists" name="import_pricelist" type="object" class="btn-primary"/>
+                    <button string="Import Customers" name="import_cutomers" type="object" class="btn-primary"/>
+                </header>
+                <group>
+                    <div class="alert alert-info" role="alert">
+                        <p>This wizard will import:</p>
+                        <ul>
+                            <li>Products with categories</li>
+                            <li>Pricelists and pricelist items</li>
+                            <li>Customers</li>
+                        </ul>
+                        <p>Make sure the CSV files are in the correct location before proceeding.</p>
+                    </div>
+                </group>
+            </form>
+        </field>
+    </record>
+
+    <!-- Menu Action -->
+    <record id="action_data_importer" model="ir.actions.act_window">
+        <field name="name">Import Data</field>
+        <field name="res_model">data.importer</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu Item -->
+    <menuitem id="menu_data_importer"
+              name="Import Data"
+              parent="sale.sale_menu_root"
+              action="action_data_importer"
+              sequence="99"/>
+</odoo>

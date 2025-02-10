@@ -1,0 +1,156 @@
+id	name	discount_policy	item_ids/product_tmpl_id	item_ids/product_id	item_ids/categ_id	item_ids/min_quantity	item_ids/applied_on	item_ids/base	item_ids/base_pricelist_id	item_ids/price_surcharge	item_ids/price_round	item_ids/price_min_margin	item_ids/price_max_margin	item_ids/date_start	item_ids/date_end	item_ids/compute_price	item_ids/fixed_price	item_ids/percent_price	item_ids/discount1	item_ids/discount2	item_ids/discount3	item_ids/price_discount
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	11186	10153		1440	0_product_variant	list_price						2022-10-04 00:00:00		percentage		44.88				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount		1667		960	0_product_variant	list_price						2023-03-31 22:00:00		percentage		49.33				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	11187	10154		720	0_product_variant	list_price						2023-05-21 22:00:00		percentage		44.8				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	12977	11947		600	0_product_variant	list_price						2023-03-27 22:00:00		percentage		37.81				
+215	LISTINO CALA GALERA	without_discount	2666	1667		480	0_product_variant	list_price						2023-03-31 22:00:00		percentage		44.59				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount		1332		480	0_product_variant	list_price						2023-03-31 22:00:00		percentage		49.1				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount		263		480	0_product_variant	list_price						2023-03-31 22:00:00		percentage		49.05				
+215	LISTINO CALA GALERA	without_discount	11187	10154		240	0_product_variant	list_price						2023-10-31 08:18:23		percentage		28.34				
+172	LISTINO DIEFFE	without_discount	11187	10154		240	0_product_variant	list_price						2023-05-21 22:00:00		percentage		28.34				
+172	LISTINO DIEFFE	without_discount	12977	11947		240	0_product_variant	list_price						2023-03-27 22:00:00		percentage		33				
+215	LISTINO CALA GALERA	without_discount	2331	1332		240	0_product_variant	list_price						2023-03-31 22:00:00		percentage		44.44				
+215	LISTINO CALA GALERA	without_discount	12977	11947		200	0_product_variant	list_price						2023-10-31 08:14:38		percentage		33				
+3	01 Corrispettivi Banco Top	without_discount	5333	4334		144	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.5				
+5	01 Corrispettivi Banco Top	without_discount	5333	4334		144	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.5				
+3	01 Corrispettivi Banco Top	without_discount	5332	4333		144	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.5				
+5	01 Corrispettivi Banco Top	without_discount	5332	4333		144	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.5				
+3	01 Corrispettivi Banco Top	without_discount		1667		144	0_product_variant	list_price						2024-01-31 23:00:00		percentage		47.8				
+5	01 Corrispettivi Banco Top	without_discount		1667		144	0_product_variant	list_price						2024-01-31 23:00:00		percentage		47.8				
+5	01 Corrispettivi Banco Top	without_discount	15975	14945		100	0_product_variant	list_price						2023-03-02 11:40:29		percentage		8				
+5	01 Corrispettivi Banco Top	without_discount	15974	14944		100	0_product_variant	list_price						2023-03-02 11:40:12		percentage		8				
+5	01 Corrispettivi Banco Top	without_discount	15973	14943		100	0_product_variant	list_price						2023-03-02 11:39:53		percentage		8				
+5	01 Corrispettivi Banco Top	without_discount	15973	14943		100	0_product_variant	list_price						2023-03-02 11:39:37		percentage		8				
+5	01 Corrispettivi Banco Top	without_discount	15972	14942		100	0_product_variant	list_price						2023-03-02 11:39:16		percentage		8				
+3	01 Corrispettivi Banco Top	without_discount	15975	14945		100	0_product_variant	list_price						2023-03-02 11:36:41		percentage		8				
+3	01 Corrispettivi Banco Top	without_discount	15974	14944		100	0_product_variant	list_price						2023-03-02 11:36:20		percentage		8				
+3	01 Corrispettivi Banco Top	without_discount	15973	14943		100	0_product_variant	list_price						2023-03-02 11:36:00		percentage		8				
+3	01 Corrispettivi Banco Top	without_discount	15972	14942		100	0_product_variant	list_price						2023-03-02 11:35:33		percentage		8				
+189	LISTINO GLASS SOLUTION	without_discount		824		100	0_product_variant	list_price						2022-04-08 00:00:00		percentage		81.43				
+215	LISTINO CALA GALERA	without_discount	1262	263		96	0_product_variant	list_price						2023-03-31 22:00:00		percentage		44.74				
+215	LISTINO CALA GALERA	without_discount	2666	1667		96	0_product_variant	list_price						2023-03-31 22:00:00		percentage		39.86				
+172	LISTINO DIEFFE	without_discount	11186	10153		96	0_product_variant	list_price						2022-10-04 00:00:00		percentage		19.69				
+199	LISTINO CALA GALERA	without_discount	11186	10153		96	0_product_variant	list_price						2022-10-04 00:00:00		percentage		19.68				
+209	LISTINO AUTOCARR.SCARINO 923 115	without_discount	11186	10153		96	0_product_variant	list_price						2022-10-04 00:00:00		percentage		19.69				
+215	LISTINO CALA GALERA	without_discount	11186	10153		96	0_product_variant	list_price						2023-10-30 23:00:00		percentage		19.69				
+277	LISTINO NUOVA EUROCAR di Pazzaglia	without_discount	11186	10153		96	0_product_variant	list_price						2024-02-29 23:00:00		percentage		19.69				
+3	01 Corrispettivi Banco Top	without_discount	11186	10153		96	0_product_variant	list_price						2022-12-31 23:00:00		percentage		19.69				
+5	01 Corrispettivi Banco Top	without_discount	11186	10153		96	0_product_variant	list_price						2022-12-31 23:00:00		percentage		19.69				
+3	01 Corrispettivi Banco Top	without_discount		1667		96	0_product_variant	list_price						2024-01-31 23:00:00		percentage		44.9				
+5	01 Corrispettivi Banco Top	without_discount		1667		96	0_product_variant	list_price						2024-01-31 23:00:00		percentage		44.9				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	12432	11402		76	0_product_variant	list_price						2023-04-10 22:00:00		percentage		59				
+3	01 Corrispettivi Banco Top	without_discount	5334	4335		72	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.5				
+5	01 Corrispettivi Banco Top	without_discount	5334	4335		72	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.5				
+215	LISTINO CALA GALERA	without_discount	2668	1669		72	0_product_variant	list_price						2023-03-31 22:00:00		percentage		44.61				
+3	01 Corrispettivi Banco Top	without_discount		263		72	0_product_variant	list_price						2024-01-31 23:00:00		percentage		47.5				
+3	01 Corrispettivi Banco Top	without_discount		1332		72	0_product_variant	list_price						2024-01-31 23:00:00		percentage		47.5				
+5	01 Corrispettivi Banco Top	without_discount		263		72	0_product_variant	list_price						2024-01-31 23:00:00		percentage		47.5				
+5	01 Corrispettivi Banco Top	without_discount		1332		72	0_product_variant	list_price						2024-01-31 23:00:00		percentage		47.5				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	3147	2148		50	0_product_variant	list_price						2022-07-07 00:00:00		percentage		52				
+3	01 Corrispettivi Banco Top	without_discount	8465	7466		50	0_product_variant	list_price						2022-12-31 23:00:00		percentage		40				
+5	01 Corrispettivi Banco Top	without_discount	8465	7466		50	0_product_variant	list_price						2022-12-31 23:00:00		percentage		40				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	2570	1571		50	0_product_variant	list_price						2023-03-31 22:00:00		percentage		10				
+333	LISTINO ELMAR OCTORAL	without_discount	16892	15862		48	0_product_variant	list_price						2024-03-03 08:51:12		percentage		57				
+5	01 Corrispettivi Banco Top	without_discount	15952	14922		48	0_product_variant	list_price						2023-02-22 11:55:36		percentage		20				
+3	01 Corrispettivi Banco Top	without_discount	15952	14922		48	0_product_variant	list_price						2023-02-22 11:51:57		percentage		20				
+3	01 Corrispettivi Banco Top	without_discount	5333	4334		48	0_product_variant	list_price						2022-12-31 23:00:00		percentage		8.5				
+5	01 Corrispettivi Banco Top	without_discount	5333	4334		48	0_product_variant	list_price						2022-12-31 23:00:00		percentage		8.5				
+3	01 Corrispettivi Banco Top	without_discount	5332	4333		48	0_product_variant	list_price						2022-12-31 23:00:00		percentage		8.5				
+5	01 Corrispettivi Banco Top	without_discount	5332	4333		48	0_product_variant	list_price						2022-12-31 23:00:00		percentage		8.5				
+215	LISTINO CALA GALERA	without_discount	1262	263		48	0_product_variant	list_price						2023-03-31 22:00:00		percentage		38.64				
+215	LISTINO CALA GALERA	without_discount	2666	1667		48	0_product_variant	list_price						2023-03-31 22:00:00		percentage		27.7				
+215	LISTINO CALA GALERA	without_discount	2331	1332		48	0_product_variant	list_price						2023-03-31 22:00:00		percentage		39.01				
+172	LISTINO DIEFFE	without_discount	11187	10154		48	0_product_variant	list_price						2023-05-21 22:00:00		percentage		19.68				
+172	LISTINO DIEFFE	without_discount	11186	10153		48	0_product_variant	list_price						2022-10-04 00:00:00		percentage		9.45				
+199	LISTINO CALA GALERA	without_discount	11187	10154		48	0_product_variant	list_price						2023-05-21 22:00:00		percentage		19.68				
+199	LISTINO CALA GALERA	without_discount	11186	10153		48	0_product_variant	list_price						2022-10-04 00:00:00		percentage		9.45				
+209	LISTINO AUTOCARR.SCARINO 923 115	without_discount	11187	10154		48	0_product_variant	list_price						2023-05-21 22:00:00		percentage		19.68				
+209	LISTINO AUTOCARR.SCARINO 923 115	without_discount	11186	10153		48	0_product_variant	list_price						2022-10-04 00:00:00		percentage		9.45				
+215	LISTINO CALA GALERA	without_discount	11187	10154		48	0_product_variant	list_price						2023-05-21 22:00:00		percentage		19.68				
+215	LISTINO CALA GALERA	without_discount	11186	10153		48	0_product_variant	list_price						2023-10-30 23:00:00		percentage		9.45				
+277	LISTINO NUOVA EUROCAR di Pazzaglia	without_discount	11187	10154		48	0_product_variant	list_price						2023-05-21 22:00:00		percentage		19.68				
+277	LISTINO NUOVA EUROCAR di Pazzaglia	without_discount	11186	10153		48	0_product_variant	list_price						2024-02-29 23:00:00		percentage		19.69				
+3	01 Corrispettivi Banco Top	without_discount	11187	10154		48	0_product_variant	list_price						2023-05-21 22:00:00		percentage		19.68				
+3	01 Corrispettivi Banco Top	without_discount	11186	10153		48	0_product_variant	list_price						2022-12-31 23:00:00		percentage		10.24				
+5	01 Corrispettivi Banco Top	without_discount	11187	10154		48	0_product_variant	list_price						2023-05-21 22:00:00		percentage		19.68				
+5	01 Corrispettivi Banco Top	without_discount	11186	10153		48	0_product_variant	list_price						2022-12-31 23:00:00		percentage		10.24				
+3	01 Corrispettivi Banco Top	without_discount		1571		48	0_product_variant	list_price						2022-12-31 23:00:00		percentage		5.05				
+3	01 Corrispettivi Banco Top	without_discount		1332		48	0_product_variant	list_price						2024-01-31 23:00:00		percentage		44.5				
+3	01 Corrispettivi Banco Top	without_discount		263		48	0_product_variant	list_price						2024-01-31 23:00:00		percentage		44.5				
+5	01 Corrispettivi Banco Top	without_discount		263		48	0_product_variant	list_price						2024-01-31 23:00:00		percentage		44.5				
+5	01 Corrispettivi Banco Top	without_discount		1332		48	0_product_variant	list_price						2024-01-31 23:00:00		percentage		44.5				
+5	01 Corrispettivi Banco Top	without_discount		1571		48	0_product_variant	list_price						2023-03-31 22:00:00		percentage		5.05				
+5	01 Corrispettivi Banco Top	without_discount	15953	14923		36	0_product_variant	list_price						2023-02-22 11:56:30		percentage		20				
+3	01 Corrispettivi Banco Top	without_discount	15953	14923		36	0_product_variant	list_price						2023-02-22 11:53:42		percentage		20				
+215	LISTINO CALA GALERA	without_discount	2668	1669		36	0_product_variant	list_price						2023-03-31 22:00:00		percentage		27.18				
+3	01 Corrispettivi Banco Top	without_discount		1669		36	0_product_variant	list_price						2023-03-31 22:00:00		percentage		27.18				
+5	01 Corrispettivi Banco Top	without_discount		1669		36	0_product_variant	list_price						2023-03-31 22:00:00		percentage		27.18				
+333	LISTINO ELMAR OCTORAL	without_discount	9583	8584		30	0_product_variant	list_price						2024-03-03 08:50:21		percentage		60				
+333	LISTINO ELMAR OCTORAL	without_discount	10438	9405		30	0_product_variant	list_price						2024-03-03 08:47:15		percentage		74.8				
+333	LISTINO ELMAR OCTORAL	without_discount	10437	9404		30	0_product_variant	list_price						2024-03-03 08:46:42		percentage		74.8				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	10438	9405		30	0_product_variant	list_price						2023-04-11 00:00:00		percentage		75.62				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	10437	9404		30	0_product_variant	list_price						2023-04-10 22:00:00		percentage		75.55				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount		6495		25	0_product_variant	list_price						2023-03-31 22:00:00		percentage		62.5				
+5	01 Corrispettivi Banco Top	without_discount	15953	14923		24	0_product_variant	list_price						2023-02-22 11:56:11		percentage		10				
+5	01 Corrispettivi Banco Top	without_discount	15952	14922		24	0_product_variant	list_price						2023-02-22 11:54:57		percentage		10				
+5	01 Corrispettivi Banco Top	without_discount	15952	14922		24	0_product_variant	list_price						2023-02-22 11:54:57		percentage		10				
+3	01 Corrispettivi Banco Top	without_discount	15953	14923		24	0_product_variant	list_price						2023-02-22 11:53:01		percentage		10				
+3	01 Corrispettivi Banco Top	without_discount	15952	14922		24	0_product_variant	list_price						2023-02-22 11:51:29		percentage		10				
+3	01 Corrispettivi Banco Top	without_discount	5334	4335		24	0_product_variant	list_price						2022-12-31 23:00:00		percentage		8.5				
+5	01 Corrispettivi Banco Top	without_discount	5334	4335		24	0_product_variant	list_price						2022-12-31 23:00:00		percentage		8.5				
+5	01 Corrispettivi Banco Top	without_discount	1351	352		24	0_product_variant	list_price						2022-12-31 23:00:00		percentage		16.62				
+215	LISTINO CALA GALERA	without_discount	1262	263		24	0_product_variant	list_price						2023-03-31 22:00:00		percentage		27.12				
+215	LISTINO CALA GALERA	without_discount	2331	1332		24	0_product_variant	list_price						2023-03-31 22:00:00		percentage		27.39				
+172	LISTINO DIEFFE	without_discount	11187	10154		24	0_product_variant	list_price						2023-05-27 22:00:00		percentage		9.84				
+199	LISTINO CALA GALERA	without_discount	11187	10154		24	0_product_variant	list_price						2023-05-21 22:00:00		percentage		9.84				
+209	LISTINO AUTOCARR.SCARINO 923 115	without_discount	11187	10154		24	0_product_variant	list_price						2023-05-21 22:00:00		percentage		9.84				
+215	LISTINO CALA GALERA	without_discount	11187	10154		24	0_product_variant	list_price						2023-05-21 22:00:00		percentage		9.84				
+277	LISTINO NUOVA EUROCAR di Pazzaglia	without_discount	11187	10154		24	0_product_variant	list_price						2023-05-21 22:00:00		percentage		9.84				
+3	01 Corrispettivi Banco Top	without_discount	11187	10154		24	0_product_variant	list_price						2023-05-21 22:00:00		percentage		9.84				
+5	01 Corrispettivi Banco Top	without_discount	11187	10154		24	0_product_variant	list_price						2023-05-21 22:00:00		percentage		9.84				
+215	LISTINO CALA GALERA	without_discount	12977	11947		20	0_product_variant	list_price						2023-10-31 08:09:58		percentage		9.84				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	6220	5221		20	0_product_variant	list_price						2022-07-07 00:00:00		percentage		48				
+3	01 Corrispettivi Banco Top	without_discount		439		20	0_product_variant	list_price						2022-12-31 23:00:00		percentage		62				
+5	01 Corrispettivi Banco Top	without_discount		439		20	0_product_variant	list_price						2022-12-31 23:00:00		percentage		62				
+333	LISTINO ELMAR OCTORAL	without_discount	17330	16300		16	0_product_variant	list_price						2024-03-03 08:49:49		percentage		59				
+333	LISTINO ELMAR OCTORAL	without_discount	17331	16301		16	0_product_variant	list_price						2024-03-03 08:47:55		percentage		59				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	9684	8685		15	0_product_variant	list_price						2023-03-31 22:00:00		percentage		34.07				
+5	01 Corrispettivi Banco Top	without_discount	6612	5613		12	0_product_variant	list_price						2024-02-29 23:00:00		percentage		20				
+3	01 Corrispettivi Banco Top	without_discount	6612	5613		12	0_product_variant	list_price						2024-02-29 23:00:00		percentage		20				
+5	01 Corrispettivi Banco Top	without_discount	17176	16146		12	0_product_variant	list_price						2023-10-27 11:07:14		percentage		14.7				
+3	01 Corrispettivi Banco Top	without_discount	17176	16146		12	0_product_variant	list_price						2023-10-27 11:05:57		percentage		14.7				
+5	01 Corrispettivi Banco Top	without_discount	16892	15862		12	0_product_variant	list_price						2023-10-12 10:02:34		percentage		43.99				
+3	01 Corrispettivi Banco Top	without_discount	16892	15862		12	0_product_variant	list_price						2023-10-12 10:01:28		percentage		43.99				
+3	01 Corrispettivi Banco Top	without_discount	16426	15396		12	0_product_variant	list_price						2023-09-11 10:15:30		percentage		45.92				
+3	01 Corrispettivi Banco Top	without_discount	16425	15395		12	0_product_variant	list_price						2023-09-11 10:13:37		percentage		45.92				
+3	01 Corrispettivi Banco Top	without_discount	16806	15776		12	0_product_variant	list_price						2023-09-11 10:11:25		percentage		45.88				
+3	01 Corrispettivi Banco Top	without_discount	16419	15389		12	0_product_variant	list_price						2023-09-11 10:10:01		percentage		45.87				
+3	01 Corrispettivi Banco Top	without_discount	16418	15388		12	0_product_variant	list_price						2023-09-11 10:09:04		percentage		45.91				
+5	01 Corrispettivi Banco Top	without_discount	16426	15396		12	0_product_variant	list_price						2023-09-11 09:13:50		percentage		45.92				
+5	01 Corrispettivi Banco Top	without_discount	16425	15395		12	0_product_variant	list_price						2023-09-11 09:12:48		percentage		45.92				
+5	01 Corrispettivi Banco Top	without_discount	16806	15776		12	0_product_variant	list_price						2023-09-11 08:57:43		percentage		45.88				
+5	01 Corrispettivi Banco Top	without_discount	16419	15389		12	0_product_variant	list_price						2023-09-11 08:52:17		percentage		45.87				
+5	01 Corrispettivi Banco Top	without_discount	16418	15388		12	0_product_variant	list_price						2023-09-11 08:49:08		percentage		45.91				
+3	01 Corrispettivi Banco Top	without_discount	15518	14488		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.81				
+5	01 Corrispettivi Banco Top	without_discount	15518	14488		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		13.81				
+3	01 Corrispettivi Banco Top	without_discount	3266	2267		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		41.76				
+5	01 Corrispettivi Banco Top	without_discount	3266	2267		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		41.76				
+5	01 Corrispettivi Banco Top	without_discount	3843	2844		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		49.55				
+3	01 Corrispettivi Banco Top	without_discount	3843	2844		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		49.55				
+3	01 Corrispettivi Banco Top	without_discount	9527	8528		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		47.59				
+5	01 Corrispettivi Banco Top	without_discount	9527	8528		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		47.59				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	3462	2463		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		42.57				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	3455	2456		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		42.57				
+167	LISTINO CLIENTE 006487 ABI TECH	without_discount	1920	921		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		35.97				
+3	01 Corrispettivi Banco Top	without_discount		3922		12	0_product_variant	list_price						2023-02-28 23:00:00		percentage		12.5				
+3	01 Corrispettivi Banco Top	without_discount		6492		12	0_product_variant	list_price						2023-02-28 23:00:00		percentage		41.11				
+3	01 Corrispettivi Banco Top	without_discount		3880		12	0_product_variant	list_price						2023-02-28 23:00:00		percentage		37.18				
+3	01 Corrispettivi Banco Top	without_discount		3095		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		48.68				
+3	01 Corrispettivi Banco Top	without_discount		3032		12	0_product_variant	list_price						2023-03-31 22:00:00		percentage		49.66				
+3	01 Corrispettivi Banco Top	without_discount		2032		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		19.24				
+3	01 Corrispettivi Banco Top	without_discount		4505		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		19.24				
+3	01 Corrispettivi Banco Top	without_discount		8567		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		20.5				
+3	01 Corrispettivi Banco Top	without_discount		8602		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		21.46				
+3	01 Corrispettivi Banco Top	without_discount		8565		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		16.13				
+3	01 Corrispettivi Banco Top	without_discount		8598		12	0_product_variant	list_price						2022-12-31 23:00:00		percentage		16.13		
+		

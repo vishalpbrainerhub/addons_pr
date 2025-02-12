@@ -30,60 +30,52 @@ class DataImporter(models.TransientModel):
   
     def import_cutomers(self):
         try:
+            _logger.info("Starting customer import process...")
             file_path = '/home/dell/Documents/Projects/PrimaPaint/odoo-15.0/primapaint_addons/data_import/models/customer-data.csv'
-            
             with open(file_path, 'r', encoding='utf-8') as file:
-                reader = csv.DictReader(file, delimiter='\t')
-                records = [row for row in reader if row.get('id') and row['id'].strip()]
-                total_records = len(records)
-                _logger.info(f"Starting import of {total_records} customers")
-                
-
-                    # id	name	email	vat	street	city	zip	country_id	l10n_it_codice_fiscale	property_product_pricelist
+                reader = csv.DictReader(file)  # Remove delimiter='\t'
+                records = [row for row in reader if row.get('id')]
+                _logger.info(f"Found {len(records)} customers in CSV")
                 for row in records:
-                    
-                    customer_id = row['id']
-                    property_product_pricelist = row['property_product_pricelist']
-                    
-                    category = ast.literal_eval(property_product_pricelist)
-                    category_id, category_name = category if isinstance(category, tuple) else ast.literal_eval(category)
-                    
-                    
-                    customer = self.env['external.import'].search([('external_import_id', '=', customer_id)], limit=1)
-                    if customer:
-                        _logger.info(f"Customer with ID {customer_id} already exists. Skipping creation...")
-                    else:
-                        category_id = int(category_id)
-                        _logger.info(f"Processing category ID: {category_id}, Name: {category_name}")
-                        pricelist = self.env['product.pricelist'].search([('external_id', '=', category_id)], limit=1)
+                    try:
+                        customer_id = row['id']
+                        price_list = ast.literal_eval(row['property_product_pricelist'])
+                        category_id = int(price_list[0]) if isinstance(price_list, tuple) else int(ast.literal_eval(price_list)[0])
                         
-                        _logger.info(f"Processing pricelist ID: {pricelist.id}, Name: {pricelist.name}")
-                        
-                        customer = self.env['res.partner'].create({
-                            'name': row['name'],
-                            'email': row['email'],
-                            # 'vat': row['vat'],
-                            'street': row['street'],
-                            'city': row['city'],
-                            'zip': row['zip'],
-                            'country_id': 110,
-                            'property_product_pricelist': pricelist.id
-                        })
-                        
-                        self.env['external.import'].create({
-                            'external_import_id': customer_id,
-                            'partner_id': customer.id
-                        })
-                        
-                        _logger.info(f"Customer with ID {customer_id} created successfully")
+                        if not self.env['external.import'].search_count([('external_import_id', '=', customer_id)]):
+                            pricelist = self.env['product.pricelist'].search([('external_id', '=', category_id)], limit=1)
+                            if not pricelist:
+                                _logger.error(f"Pricelist not found for category_id: {category_id}")
+                                continue
+                                
+                            customer = self.env['res.partner'].create({
+                                'name': row['name'],
+                                'email': row['email'],
+                                'street': row['street'],
+                                'city': row['city'],
+                                'zip': row['zip'],
+                                'country_id': 110,
+                                'property_product_pricelist': pricelist.id
+                            })
+                            
+                            self.env['external.import'].create({
+                                'external_import_id': customer_id,
+                                'partner_id': customer.id
+                            })
+                            
+                            _logger.info(f"Created customer {customer.name} (ID: {customer_id})")
                     
-                
-
+                    except Exception as e:
+                        _logger.error(f"Error processing customer {row.get('name', 'Unknown')}: {e}")
+                        continue
                         
         except Exception as e:
-            _logger.error(f"Error reading file: {e}")
+            _logger.error(f"File reading error: {e}")
             return False
+            
+        return True
 
     def import_all_data(self):
         _logger.info("Starting customer import process...")
         return self.import_cutomers()
+        

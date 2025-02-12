@@ -23,9 +23,30 @@ class DataImporter(models.TransientModel):
             file_path = '/home/dell/Documents/Projects/PrimaPaint/odoo-15.0/primapaint_addons/data_import/models/pricelist_data.csv'
             
             with open(file_path, 'r', encoding='utf-8') as file:
-                reader = csv.DictReader(file, delimiter='\t')
+                content = file.read()
+                if not content.strip():
+                    _logger.error("CSV file is empty")
+                    return
+                    
+                file.seek(0)
+                # Try to detect delimiter
+                dialect = csv.Sniffer().sniff(content[:1024])
+                reader = csv.DictReader(file, dialect=dialect)
+                
+                # Validate required columns
+                required_fields = ['id', 'name', 'discount_policy']
+                header = reader.fieldnames
+                if not all(field in header for field in required_fields):
+                    _logger.error(f"Missing required columns. Required: {required_fields}, Found: {header}")
+                    return
+                    
                 records = [row for row in reader if row.get('id') and row['id'].strip()]
                 total_records = len(records)
+                
+                if total_records == 0:
+                    _logger.error("No valid records found in CSV")
+                    return
+                    
                 _logger.info(f"Starting import of {total_records} pricelist")
                 
             
@@ -46,6 +67,11 @@ class DataImporter(models.TransientModel):
                         _logger.info(f"Pricelist with ID {pricelist_external_id} created successfully")
                     
                     # Find product template
+                    if row['item_ids/product_id'] is None:
+                        if row['item_ids/categ_id']:
+                            _logger.info(f"Need to handle by category --------------------------------------")
+                            continue
+                        
                     product_tmpl = self.env['product.template'].search([('external_id', '=', row['item_ids/product_id'])], limit=1)
                     
                     if not product_tmpl:

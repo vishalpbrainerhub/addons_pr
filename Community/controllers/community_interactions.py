@@ -371,6 +371,7 @@ class SocialMedia(http.Controller):
 
             if already_like:
                 already_like.unlink()
+                request.env['notification.storage'].sudo().search([('patner_id', '=', customer.id), ('post_id', '=', post_id)]).unlink()
                 
                 return {
                     "status": "success",
@@ -404,7 +405,8 @@ class SocialMedia(http.Controller):
                         'title': 'Nuovo like',
                         'data': {'type': 'new_like'},
                         'include_player_ids': device_token,
-                        'filter': 'community'
+                        'filter': 'community',
+                        'post_id': post_id
                     })
                     
                 return {
@@ -832,6 +834,7 @@ class SocialMedia(http.Controller):
             
             if already_like:
                 already_like.unlink()
+                request.env['notification.storage'].sudo().search([('patner_id', '=', customer.id), ('comment_id', '=', comment_id)]).unlink()
                 return {
                     "status": "success",
                     "message": "Mi piace al commento rimosso",
@@ -862,7 +865,8 @@ class SocialMedia(http.Controller):
                         'title': 'Nuovo like',
                         'data': {'type': 'new_comment_like'},
                         'include_player_ids': device_token,
-                        'filter': 'community'
+                        'filter': 'community',
+                        'comment_id': comment_id
                     })
             return {
                 "status": "success",

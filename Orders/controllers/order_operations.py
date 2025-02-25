@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from .user_authentication import SocialMediaAuth
 from .notification_service import CustomerController
+from .helper_functions import ProductPriceController
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -13,67 +14,38 @@ notification_service = CustomerController()
 class Ecommerce_orders(http.Controller):
     
     def _calculate_vat(self, order):
-        vat_1_percentage = 0
-        vat_2_percentage = 0
-        vat_1_value = 0 
-        vat_2_value = 0
+        tax_groups = {}
+        
+        for line in order.order_line:
+            line_amount = line.price_subtotal
+            for tax in line.tax_id:
+                if tax.amount not in tax_groups:
+                    tax_groups[tax.amount] = {
+                        'percentage': tax.amount,
+                        'value': line_amount * (tax.amount / 100)
+                    }
+                else:
+                    tax_groups[tax.amount]['value'] += line_amount * (tax.amount / 100)
 
-        if order.order_line:
-            line_taxes = order.order_line[0].tax_id
-            if line_taxes:
-                sorted_taxes = sorted(line_taxes, key=lambda x: x.amount)
-                if len(sorted_taxes) >= 1:
-                    vat_1_percentage = sorted_taxes[0].amount
-                    vat_1_value = order.amount_untaxed * (vat_1_percentage/100)
-                if len(sorted_taxes) >= 2:  
-                    vat_2_percentage = sorted_taxes[1].amount
-                    vat_2_value = order.amount_untaxed * (vat_2_percentage/100)
-
-        return {
-            'vat_1_percentage': vat_1_percentage,
-            'vat_2_percentage': vat_2_percentage, 
-            'vat_1_value': vat_1_value,
-            'vat_2_value': vat_2_value
+        # Sort tax rates and get the first two if they exist
+        sorted_taxes = sorted(tax_groups.items())
+        vat_data = {
+            'vat_1_percentage': 0,
+            'vat_2_percentage': 0,
+            'vat_1_value': 0,
+            'vat_2_value': 0
         }
 
-
-    def _get_price_from_pricelist(self, product, partner_id, quantity=1.0):
-        partner = request.env['res.partner'].sudo().browse(partner_id)
-        pricelist = partner.property_product_pricelist
-        
-        pricelist_items = request.env['product.pricelist.item'].sudo().search([
-            ('pricelist_id', '=', pricelist.id),
-            ('product_id', '=', product.id),
-            '|',
-            ('date_start', '<=', fields.Date.today()),
-            ('date_start', '=', False),
-            '|', 
-            ('date_end', '>=', fields.Date.today()),
-            ('date_end', '=', False),
-            ('min_quantity', '<=', quantity)
-        ], order='min_quantity desc')
-
-        if not pricelist_items:
-            return product.list_price
-
-        item = pricelist_items[0]
-        
-        if item.compute_price == 'fixed':
-            price = item.fixed_price
-        elif item.compute_price == 'percentage':
-            price = product.list_price * (1 - item.percent_price / 100)
-        else:
-            price = product.list_price
-
-        if pricelist.currency_id != product.currency_id:
-            price = product.currency_id._convert(
-                price,
-                pricelist.currency_id,
-                product.company_id,
-                fields.Date.today()
-            )
+        if sorted_taxes:
+            vat_data['vat_1_percentage'] = sorted_taxes[0][0]
+            vat_data['vat_1_value'] = sorted_taxes[0][1]['value']
             
-        return price
+            if len(sorted_taxes) > 1:
+                vat_data['vat_2_percentage'] = sorted_taxes[1][0]
+                vat_data['vat_2_value'] = sorted_taxes[1][1]['value']
+
+        return vat_data
+
 
     @http.route('/api/orders/<int:order_id>', auth='public', type='http', methods=['GET'])
     def get_order_single(self, order_id):
@@ -132,19 +104,18 @@ class Ecommerce_orders(http.Controller):
                 }
 
                 for line in order.sudo().order_line:
-                    price = self._get_price_from_pricelist(line.product_id, partner_id, line.product_uom_qty)
-                    image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
                     
+                    image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
                     product_data = {
                         'id': line.product_id.id,
                         'name': line.product_id.name,
-                        'list_price': price * line.product_uom_qty,
+                        'list_price': line.price_unit * line.product_uom_qty,
                         'active': line.product_id.active,
                         'barcode': line.product_id.barcode,
                         'color': line.product_id.color,
                         'image': image_url,
                         'quantity': line.product_uom_qty,
-                        'base_price': line.product_id.list_price,
+                        'base_price': line.price_unit,
                         'discount': line.discount or 0,
                         'order_id': line.order_id.id,
                         'code': line.product_id.code_,
@@ -161,7 +132,7 @@ class Ecommerce_orders(http.Controller):
                 'message': 'Si è verificato un errore durante il recupero dei dettagli dell\'ordine.',
                 'info': str(e)
             }), content_type='application/json', status=500)
-     
+    
     @http.route('/api/orders', auth='public', type='http', methods=['GET'])
     def get_orders(self):
         try:
@@ -185,6 +156,8 @@ class Ecommerce_orders(http.Controller):
                     ('id', '=', order.shipping_address_id)
                 ])
                 shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+                
+                # Using improved VAT calculation
                 vat_data = self._calculate_vat(order)
 
                 order_data = {
@@ -251,17 +224,58 @@ class Ecommerce_orders(http.Controller):
                 return {'status': 'error', 'message': "L'ordine non contiene prodotti.", 
                     'info': 'The order contains no products.'}, 400
 
+            # Get partner's pricelist
+            partner = request.env['res.partner'].sudo().browse(partner_id)
+            price_list = partner.property_product_pricelist
+            
+            if not price_list:
+                return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
+                    'info': 'Price list not found.'}, 400
+
+            # Check quantities and collect errors
+            invalid_quantities = []
+            
+            for line in order_line:
+                # Find matching pricelist items for this product
+                matching_items = price_list.item_ids.filtered(
+                    lambda x: x.product_tmpl_id.id == line.product_id.product_tmpl_id.id 
+                            or x.product_id.id == line.product_id.id
+                )
+                
+                if matching_items:
+                    # Get minimum required quantity (lowest min_quantity from rules)
+                    min_required = min(matching_items.mapped('min_quantity'))
+                    
+                    if line.product_uom_qty < min_required:
+                        invalid_quantities.append({
+                            'product_name': line.product_id.name,
+                            'current_quantity': line.product_uom_qty,
+                            'min_required': min_required
+                        })
+
+            # If there are invalid quantities, return error
+            if invalid_quantities:
+                return {
+                    'status': 'error',
+                    'message': f'Quantità minima non raggiunta per alcuni prodotti. Minimo {min_required} richiesto.',
+                    'info': f'Minimum quantity not met for some products. Minimum {min_required} required.',
+                    'invalid_items': invalid_quantities
+                }, 400
+
             # Update prices based on pricelist before confirming
             for line in order_line:
-                price = self._get_price_from_pricelist(
-                    line.product_id, 
-                    partner_id,
-                    line.product_uom_qty
+                price = ProductPriceController.calculate_price_product(
+                    line.product_id.id, 
+                    line.product_uom_qty,
+                    partner_id
                 )
-                line.sudo().write({'price_unit': price})
+                if price:
+                    line.sudo().write({'price_unit': price})
 
+            # Confirm order
             order.sudo().action_confirm()
 
+            # Handle rewards points
             total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
             if total_points > 0:
                 request.env['rewards.points'].sudo().create({
@@ -285,55 +299,56 @@ class Ecommerce_orders(http.Controller):
                         'total_points': total_points
                     })
 
+            # Get shipping address
             user_address = request.env['social_media.custom_address'].sudo().search([
                 ('id', '=', order.shipping_address_id)
             ])
 
             shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
+            # Send confirmation email
             template = request.env['mail.template'].sudo().create({
-            'name': 'Conferma Ordine',
-            'email_from': 'admin@primapaint.com',
-            'email_to': f"{order.partner_id.email}, staff@primapaint.it",
-            'subject': f'Ordine #{order.name} Confermato',
-            'body_html': f'''
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #2C3E50;">Conferma Ordine</h2>
-                    
-                    <p>Caro/a {order.partner_id.name},</p>
-                    
-                    <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
-                    
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                        <p><strong>Numero Ordine:</strong> {order.name}</p>
-                        <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
-                        <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                'name': 'Conferma Ordine',
+                'email_from': 'admin@primapaint.com',
+                'email_to': f"{order.partner_id.email}, staff@primapaint.it",
+                'subject': f'Ordine #{order.name} Confermato',
+                'body_html': f'''
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #2C3E50;">Conferma Ordine</h2>
+                        
+                        <p>Caro/a {order.partner_id.name},</p>
+                        
+                        <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                            <p><strong>Numero Ordine:</strong> {order.name}</p>
+                            <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                            <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                        </div>
+
+                        <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
+                        <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                            {order.partner_shipping_id.street or ''}<br>
+                            {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
+                            {order.partner_shipping_id.country_id.name or ''}
+                        </p>
+
+                        <p style="color: #666; margin-top: 30px; font-size: 12px;">
+                            Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
+                        </p>
                     </div>
-
-                    <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
-                    <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                        {order.partner_shipping_id.street or ''}<br>
-                        {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
-                        {order.partner_shipping_id.country_id.name or ''}
-                    </p>
-
-                    <p style="color: #666; margin-top: 30px; font-size: 12px;">
-                        Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
-                    </p>
-                </div>
-            ''',
-            'model_id': request.env['ir.model']._get('sale.order').id,
-            'auto_delete': True
+                ''',
+                'model_id': request.env['ir.model']._get('sale.order').id,
+                'auto_delete': True
             })
             template.send_mail(order.id, force_send=True)
-            
-            
+
+            # Handle notifications
             filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
             if filter_notification.order:
                 customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
                 device_token = customer.onesignal_player_id       
                 if device_token:
-                    
                     notification_service.send_onesignal_notification(
                         device_token,
                         'Ordine confermato con successo',
@@ -349,8 +364,7 @@ class Ecommerce_orders(http.Controller):
                         'include_player_ids': device_token,
                         'filter': 'order'
                     })
-            
-                
+
             return {
                 'status': 'success',
                 'message': 'Ordine confermato con successo e carrello svuotato.',
@@ -366,6 +380,7 @@ class Ecommerce_orders(http.Controller):
         except Exception as e:
             return {'status': 'error', 'message': 'Si è verificato un errore durante la conferma dell\'ordine.',
                     'info': str(e)}, 500
+        
 
     @http.route('/api/reorder', auth='public', type='json', methods=['POST'])
     def reorder(self):
@@ -389,14 +404,53 @@ class Ecommerce_orders(http.Controller):
 
             new_order = order.sudo().copy()
             
+            # Get partner's pricelist
+            partner = request.env['res.partner'].sudo().browse(partner_id)
+            price_list = partner.property_product_pricelist
+            
+            if not price_list:
+                return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
+                    'info': 'Price list not found.'}, 400
+
+            # Check quantities and collect errors
+            invalid_quantities = []
+            
+            for line in new_order.order_line:
+                # Find matching pricelist items for this product
+                matching_items = price_list.item_ids.filtered(
+                    lambda x: x.product_tmpl_id.id == line.product_id.product_tmpl_id.id 
+                            or x.product_id.id == line.product_id.id
+                )
+                
+                if matching_items:
+                    # Get minimum required quantity (lowest min_quantity from rules)
+                    min_required = min(matching_items.mapped('min_quantity'))
+                    
+                    if line.product_uom_qty < min_required:
+                        invalid_quantities.append({
+                            'product_name': line.product_id.name,
+                            'current_quantity': line.product_uom_qty,
+                            'min_required': min_required
+                        })
+
+            # If there are invalid quantities, return error
+            if invalid_quantities:
+                return {
+                    'status': 'error',
+                    'message': 'Quantità minima non raggiunta per alcuni prodotti.',
+                    'info': 'Minimum quantity not met for some products.',
+                    'invalid_items': invalid_quantities
+                }, 400
+
             # Update prices based on current pricelist
             for line in new_order.order_line:
-                price = self._get_price_from_pricelist(
-                    line.product_id,
-                    partner_id,
-                    line.product_uom_qty
+                price = ProductPriceController.calculate_price_product(
+                    line.product_id.id,
+                    line.product_uom_qty,
+                    partner_id
                 )
-                line.sudo().write({'price_unit': price})
+                if price:
+                    line.sudo().write({'price_unit': price})
 
             new_order.sudo().action_confirm()
 
@@ -422,46 +476,104 @@ class Ecommerce_orders(http.Controller):
 
             shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
-            template = request.env['mail.template'].sudo().create({
-            'name': 'Conferma Riordine',
-            'email_from': 'admin@primapaint.com',
-            'email_to': f"{new_order.partner_id.email}, staff@primapaint.it",
-            'subject': f'Riordine #{new_order.name} Confermato',
-            'body_html': f'''
+            # Create order details HTML for email
+            order_lines_html = ""
+            for line in new_order.order_line:
+                order_lines_html += f"""
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">{line.product_id.name}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">{int(line.product_uom_qty)}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">{line.price_unit:.2f} {new_order.currency_id.symbol}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">{line.price_total:.2f} {new_order.currency_id.symbol}</td>
+                    </tr>
+                """
+
+            email_template = f'''
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #2C3E50;">Conferma Riordine</h2>
-                    
-                    <p>Caro/a {new_order.partner_id.name},</p>
-                    <p>Abbiamo elaborato il tuo riordine basato sul tuo ordine precedente. Dettagli:</p>
-                    
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                        <p><strong>Numero Ordine:</strong> {new_order.name}</p>
-                        <p><strong>Ordine Originale:</strong> {order.name}</p>
-                        <p><strong>Data Ordine:</strong> {new_order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
-                        <p><strong>Importo Totale:</strong> {new_order.currency_id.symbol}{new_order.amount_total:.2f}</p>
-                        <p><strong>Punti Premio Ottenuti:</strong> {order_reward_points}</p>
+                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
+                        <h2 style="color: #2C3E50; margin-bottom: 20px;">Conferma Riordine</h2>
+                        
+                        <p>Gentile {new_order.partner_id.name},</p>
+                        <p>Grazie per il tuo riordine. Di seguito i dettagli del tuo ordine:</p>
                     </div>
 
-                    <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
-                    <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                        {user_address.address or ''}, {user_address.continued_address or ''}<br>
-                        {user_address.city or ''}, {user_address.postal_code or ''}<br>
-                        {user_address.village or ''}, {user_address.state_id.name or ''}<br>
-                        {user_address.country_id.name or ''}
-                    </p>
+                    <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #e9ecef;">
+                        <h3 style="color: #2C3E50; margin-bottom: 15px;">Dettagli Ordine</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                            <tr>
+                                <td style="padding: 5px;"><strong>Numero Ordine:</strong></td>
+                                <td>{new_order.name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px;"><strong>Ordine Originale:</strong></td>
+                                <td>{order.name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px;"><strong>Data Ordine:</strong></td>
+                                <td>{new_order.date_order.strftime('%Y-%m-%d %H:%M')}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px;"><strong>Punti Premio:</strong></td>
+                                <td>{order_reward_points}</td>
+                            </tr>
+                        </table>
+
+                        <h3 style="color: #2C3E50; margin: 20px 0 15px;">Prodotti Ordinati</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                            <thead>
+                                <tr style="background-color: #f8f9fa;">
+                                    <th style="padding: 8px; text-align: left;">Prodotto</th>
+                                    <th style="padding: 8px; text-align: center;">Quantità</th>
+                                    <th style="padding: 8px; text-align: right;">Prezzo Unit.</th>
+                                    <th style="padding: 8px; text-align: right;">Totale</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {order_lines_html}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" style="padding: 8px; text-align: right;"><strong>Totale Ordine:</strong></td>
+                                    <td style="padding: 8px; text-align: right;"><strong>{new_order.amount_total:.2f} {new_order.currency_id.symbol}</strong></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                            <h3 style="color: #2C3E50; margin-bottom: 10px;">Indirizzo di Spedizione</h3>
+                            <p style="margin: 0;">
+                                {user_address.address or ''}, {user_address.continued_address or ''}<br>
+                                {user_address.city or ''}, {user_address.postal_code or ''}<br>
+                                {user_address.village or ''}, {user_address.state_id.name or ''}<br>
+                                {user_address.country_id.name or ''}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="color: #666; font-size: 12px; margin-top: 20px; padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
+                        <p>Per qualsiasi domanda o assistenza, non esitare a contattare il nostro servizio clienti.</p>
+                        <p>Grazie per aver scelto i nostri prodotti!</p>
+                    </div>
                 </div>
-            ''',
-            'model_id': request.env['ir.model']._get('sale.order').id,
-            'auto_delete': True
+            '''
+
+            template = request.env['mail.template'].sudo().create({
+                'name': 'Conferma Riordine',
+                'email_from': 'admin@primapaint.com',
+                'email_to': f"{new_order.partner_id.email}, staff@primapaint.it",
+                'subject': f'Riordine #{new_order.name} Confermato',
+                'body_html': email_template,
+                'model_id': request.env['ir.model']._get('sale.order').id,
+                'auto_delete': True
             })
             template.send_mail(new_order.id, force_send=True)
             
+            # Handle notifications
             filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
             if filter_notification.order:
                 customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
                 device_token = customer.onesignal_player_id       
                 if device_token:
-                    
                     notification_service.send_onesignal_notification(
                         device_token,
                         'Ordine riordinato con successo',
@@ -494,154 +606,4 @@ class Ecommerce_orders(http.Controller):
             return {'status': 'error', 'message': 'Si è verificato un errore durante il riordino.',
                     'info': str(e)}, 500
 
-    @http.route('/api/cancel_order', auth='public', type='json', methods=['POST'], csrf=False)
-    def cancel_order(self, **post):
-        try:
-            user = SocialMediaAuth.user_auth(self)
-            if user['status'] == 'error':
-                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
-
-            partner_id = user['user_id']
-            order_id = request.jsonrequest.get('order_id')
-
-            if not order_id:
-                return {'status': 'error', 'message': 'ID dell\'ordine non fornito.',
-                    'info': 'Order ID is required.'}, 400
-
-            order = request.env['sale.order'].sudo().search([
-                ('id', '=', order_id),
-                ('partner_id', '=', partner_id),
-                ('state', '!=', 'draft')
-            ], limit=1)
-
-            if not order:
-                return {'status': 'error', 'message': 'Ordine non trovato o già confermato.',
-                    'info': 'Order not found or already confirmed.'}, 404
-
-            order_line = request.env['sale.order.line'].sudo().search([('order_id', '=', order.id)])
-            if not order_line:
-                return {'status': 'error', 'message': 'L\'ordine non contiene prodotti.',
-                    'info': 'Order has no products.'}, 400
-
-            reward_points = request.env['rewards.points'].sudo().search([
-                ('order_id', '=', order.id),
-                ('user_id', '=', partner_id),
-                ('status', '=', 'gain')
-            ])
-
-            if reward_points:
-                total_points_obj = request.env['rewards.totalpoints'].sudo().search([
-                    ('user_id', '=', partner_id)
-                ], limit=1)
-
-                if total_points_obj and total_points_obj.total_points >= reward_points.points:
-                    total_points_obj.sudo().write({
-                        'total_points': total_points_obj.total_points - reward_points.points
-                    })
-                    reward_points.sudo().unlink()
-
-            order.sudo().action_cancel()
-
-            return {
-                'status': 'success',
-                'message': 'Ordine annullato con successo.',
-                'info': 'Order cancelled successfully.',
-                'order_id': order.id,
-                'order_state': order.state,
-                'order_amount_total': order.amount_total,
-                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
-                'points_deducted': reward_points.points if reward_points else 0
-            }
-
-        except Exception as e:
-            return {'status': 'error', 'message': 'Si è verificato un errore durante l\'annullamento dell\'ordine.',
-                    'info': str(e)}, 500
-
-
-    # @http.route('/api/v1/products/pricelist', type='http', auth='public', methods=['GET'], csrf=False)
-    # def get_products_with_pricelist(self, **kwargs):
-    #     try:
-    #         customer_email = kwargs.get('email')
-    #         if not customer_email:
-    #             return json.dumps({
-    #                 'success': False,
-    #                 'error': 'Customer email is required'
-    #             })
-
-    #         # Find customer
-    #         customer = request.env['res.partner'].sudo().search([
-    #             ('email', '=', customer_email),
-    #             ('active', '=', True)
-    #         ], limit=1)
-
-    #         if not customer:
-    #             return json.dumps({
-    #                 'success': False,
-    #                 'error': 'Customer not found'
-    #             })
-
-    #         # Get active products
-    #         products = request.env['product.template'].sudo().search([
-    #             ('active', '=', True)
-    #         ])
-
-    #         # Get customer's pricelist or default pricelist
-    #         pricelist = customer.property_product_pricelist or request.env['product.pricelist'].sudo().search([], limit=1)
-
-    #         result = []
-    #         for product in products:
-    #             # Get pricelist items for this product
-    #             pricelist_items = request.env['product.pricelist.item'].sudo().search([
-    #                 ('pricelist_id', '=', pricelist.id),
-    #                 ('product_tmpl_id', '=', product.id),
-    #                 ('applied_on', '=', '1_product')
-    #             ], order='min_quantity asc')
-
-    #             # Prepare price data with discounts
-    #             price_data = [{
-    #                 'quantity': 1,
-    #                 'price': product.list_price,
-    #                 'discount_percentage': 0
-    #             }]
-
-    #             # Add prices for each pricelist item
-    #             for item in pricelist_items:
-    #                 price = product.list_price * (1 - (item.percent_price / 100)) if item.compute_price == 'percentage' else item.fixed_price
-    #                 price_data.append({
-    #                     'quantity': item.min_quantity,
-    #                     'price': price,
-    #                     'discount_percentage': item.percent_price if item.compute_price == 'percentage' else 0
-    #                 })
-
-    #             product_data = {
-    #                 'id': product.id,
-    #                 'name': product.name,
-    #                 'default_code': product.default_code,
-    #                 'list_price': product.list_price,
-    #                 'standard_price': product.standard_price,
-    #                 'category': product.categ_id.name,
-    #                 'quantity_pricing': price_data,
-    #                 'currency': pricelist.currency_id.name,
-    #             }
-                
-    #             # Add image if available
-    #             # if product.image_1920:
-    #             #     product_data['image'] = product.image_1920.decode('utf-8') if isinstance(product.image_1920, bytes) else product.image_1920
-
-    #             result.append(product_data)
-    #         return Response(json.dumps({
-    #             'success': True,
-    #             'customer': {
-    #                 'id': customer.id,
-    #                 'name': customer.name,
-    #                 'email': customer.email,
-    #                 'pricelist_name': pricelist.name
-    #             },
-    #             'products': result
-    #         }), content_type='application/json')
-
-    #     except Exception as e:
-    #         return json.dumps({
-    #             'success': False,
-    #             'error': str(e)
-    #         })
+    

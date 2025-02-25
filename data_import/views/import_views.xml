@@ -11,6 +11,7 @@
                     <button string="Import Products" name="import_products" type="object" class="btn-primary"/>
                     <button string="Import Pricelists" name="import_pricelist" type="object" class="btn-primary"/>
                     <button string="Import Customers" name="import_cutomers" type="object" class="btn-primary"/>
+                     <button string="Order Status" name="import_order_status" type="object" class="btn-primary"/>
                 </header>
                 <group>
                     <div class="alert alert-info" role="alert">

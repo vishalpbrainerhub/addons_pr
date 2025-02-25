@@ -4,6 +4,7 @@ import csv
 import logging
 import ast
 from contextlib import closing
+import os
 
 _logger = logging.getLogger(__name__)
 
@@ -14,11 +15,6 @@ class Partner_External_import_id(models.Model):
     partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     external_import_id = fields.Integer(string='External Import ID', required=True)
     
-    
-
-class ProductPricelist(models.Model):
-    _inherit = 'product.pricelist'
-    external_id = fields.Char('External ID', index=True)
     
     
 
@@ -31,7 +27,7 @@ class DataImporter(models.TransientModel):
     def import_cutomers(self):
         try:
             _logger.info("Starting customer import process...")
-            file_path = '/home/dell/Documents/Projects/PrimaPaint/odoo-15.0/primapaint_addons/data_import/models/customer-data.csv'
+            file_path = os.environ.get('CUSTOMER_DATA_PATH')
             with open(file_path, 'r', encoding='utf-8') as file:
                 reader = csv.DictReader(file)  # Remove delimiter='\t'
                 records = [row for row in reader if row.get('id')]
@@ -55,7 +51,10 @@ class DataImporter(models.TransientModel):
                                 'city': row['city'],
                                 'zip': row['zip'],
                                 'country_id': 110,
+                                'vat': row['vat'],
+                                # 'l10n_it_codice_fiscale': row['l10n_it_codice_fiscale'],
                                 'property_product_pricelist': pricelist.id
+                                
                             })
                             
                             self.env['external.import'].create({

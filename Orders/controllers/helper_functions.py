@@ -7,212 +7,119 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
+import json
+from odoo import http, fields, _
+from odoo.http import request, Response
+from odoo.exceptions import UserError, ValidationError
+from datetime import datetime
+import logging
+
+_logger = logging.getLogger(__name__)
+
 class ProductPriceController(http.Controller):
     
-    def _get_customer_by_email(self, email):
-        """Get customer record by email"""
-        if not email:
-            return False
-            
-        Partner = request.env['res.partner'].sudo()
-        partner = Partner.search([
-            ('email', '=', email),
-            ('active', '=', True)
-        ], limit=1)
-        
-        return partner
-    
-    def _get_product_pricelist(self, partner):
-        """Get appropriate pricelist for the customer"""
-        Pricelist = request.env['product.pricelist'].sudo()
-        
-        if partner and partner.property_product_pricelist:
-            return partner.property_product_pricelist
-        
-        # Default to public pricelist if no customer-specific one found
-        return Pricelist.search([('name', '=', 'Public Pricelist')], limit=1)
-    
-    def _get_product_price_data(self, product, pricelist, quantity=1.0, partner=None):
+    @staticmethod
+    def calculate_price_product(product_id, quantity, partner_id):
         """
-        Calculate product price based on pricelist and quantity
-        Returns prices and related information
+        Calculate product price based on quantity. Handles both product-specific 
+        and category-based pricelist items.
+        
+        Args:
+            product_id (int): Product ID (can be product.product or product.template)
+            quantity (float): Quantity of product
+            partner_id (int): Partner ID for pricelist lookup
         """
         try:
-            # Set context for price computation
-            product = product.with_context(
-                quantity=quantity,
-                pricelist=pricelist.id,
-                partner=partner.id if partner else None
-            )
+            # Get product
+            env = request.env
+            product = env['product.product'].sudo().browse(product_id)
             
-            # Get base price
+            # If product not found, try getting from template
+            if not product:
+                template = env['product.template'].sudo().browse(product_id)
+                if template:
+                    product = template.product_variant_id
+            
+            if not product:
+                return 0
+            
+            # Get partner's pricelist
+            partner = env['res.partner'].sudo().browse(partner_id)
+            if not partner:
+                return product.list_price
+                
+            price_list = partner.property_product_pricelist
+            if not price_list:
+                return product.list_price
+            
+
+            # Get matching pricelist items for both product and category
+            price_rules = []
             base_price = product.list_price
             
-            # Get pricelist price
-            pricelist_price = pricelist.get_product_price(
-                product, 
-                quantity,
-                partner
-            )
-            
-            # Get quantity breaks if any
-            quantity_breaks = []
-            if product.item_ids:
-                for item in product.item_ids:
-                    if item.min_quantity > 0:
-                        item_price = pricelist.get_product_price(
-                            product,
-                            item.min_quantity,
-                            partner
-                        )
-                        quantity_breaks.append({
-                            'min_quantity': item.min_quantity,
-                            'price': item_price
-                        })
-            
-            return {
-                'base_price': base_price,
-                'pricelist_price': pricelist_price,
-                'final_price': pricelist_price,
-                'currency': pricelist.currency_id.name,
-                'pricelist_name': pricelist.name,
-                'quantity_breaks': sorted(quantity_breaks, key=lambda x: x['min_quantity']),
-                'min_quantity': product.min_quantity or 1.0,
-                'has_special_price': abs(base_price - pricelist_price) > 0.01
-            }
-            
-        except Exception as e:
-            _logger.error(f"Error calculating price for product {product.id}: {str(e)}")
-            return None
+            for item in price_list.item_ids:
+                # Check for product-specific rules
+                if (item.product_tmpl_id.id == product.product_tmpl_id.id or 
+                    item.product_id.id == product.id):
 
-    @http.route(['/api/v1/products/pricelist'], 
-                type='http', auth='public', methods=['GET'], csrf=False)
-    def get_products_with_pricelist(self, **kwargs):
-        try:
-            # Get query parameters
-            email = kwargs.get('email')
-            quantity = float(kwargs.get('quantity', 1.0))
-            product_ids = kwargs.get('product_ids')
-            
-            # Get customer and their pricelist
-            partner = self._get_customer_by_email(email)
-            pricelist = self._get_product_pricelist(partner)
-            
-            # Build product domain
-            domain = [('active', '=', True)]
-            if product_ids:
-                product_ids = [int(pid) for pid in product_ids.split(',')]
-                domain.append(('id', 'in', product_ids))
-            
-            # Get products
-            Product = request.env['product.template'].sudo()
-            products = Product.search(domain)
-            
-            product_data = []
-            for product in products:
-                price_info = self._get_product_price_data(product, pricelist, quantity, partner)
-                if price_info:
-                    product_data.append({
-                        'id': product.id,
-                        'name': product.name,
-                        'sku': product.default_code or '',
-                        'code_': product.code_ or '',
-                        'quantity': quantity,
-                        'prices': price_info,
-                        'uom': product.uom_id.name,
-                        'category': product.categ_id.name,
-                        'external_id': product.external_import_id or '',
+                    price = 0
+                    if item.compute_price == 'fixed':
+                        price = item.fixed_price
+                    elif item.compute_price == 'percentage':
+                        price = item.percent_price
+                    elif item.compute_price == 'formula':
+                        price = base_price * (1 - (item.price_discount / 100))
+                    
+                    price_rules.append({
+                        'min_quantity': item.min_quantity,
+                        'price': price,
+                        'applied_on': 'product'
                     })
-            
-            return Response(
-                json.dumps({
-                    'success': True,
-                    'customer': {
-                        'id': partner.id if partner else None,
-                        'name': partner.name if partner else None,
-                        'pricelist': pricelist.name,
-                        'pricelist_id': pricelist.id,
-                    },
-                    'products': product_data,
-                    'timestamp': fields.Datetime.now()
-                }), 
-                content_type='application/json'
-            )
+                
+                # Check for category-based rules
+                elif item.categ_id:
+                    price = 0
+                    if item.compute_price == 'fixed':
+                        price = item.fixed_price
+                    elif item.compute_price == 'percentage':
+                        price = item.percent_price
+                    elif item.compute_price == 'formula':
+                        price = base_price * (1 - (item.price_discount / 100))
+                    
+                    price_rules.append({
+                        'min_quantity': 0,  # Category rules don't typically have min quantity
+                        'price': price,
+                        'applied_on': 'category',
+                    })
 
-        except Exception as e:
-            _logger.error(f"Error processing request: {str(e)}")
-            return Response(
-                json.dumps({
-                    'success': False,
-                    'error': str(e)
-                }), 
-                content_type='application/json',
-                status=500
-            )
+            if not price_rules:
+                return base_price
             
-    @http.route(['/api/v1/product/price'], 
-                type='http', auth='public', methods=['GET'], csrf=False)
-    def get_single_product_price(self, **kwargs):
-        try:
-            # Get parameters
-            product_id = int(kwargs.get('product_id', 0))
-            email = kwargs.get('email')
-            quantity = float(kwargs.get('quantity', 1.0))
-            
-            if not product_id:
-                raise ValidationError(_('Product ID is required'))
-            
-            # Get customer and pricelist    
-            partner = self._get_customer_by_email(email)
-            pricelist = self._get_product_pricelist(partner)
-                
-            # Get product
-            Product = request.env['product.template'].sudo()
-            product = Product.browse(product_id)
-            
-            if not product.exists():
-                return Response(
-                    json.dumps({
-                        'success': False,
-                        'error': 'Product not found'
-                    }), 
-                    content_type='application/json',
-                    status=404
+            # Sort rules by sequence and min_quantity
+            # Product-specific rules take precedence over category rules
+            sorted_rules = sorted(
+                price_rules, 
+                key=lambda x: (
+                    x['applied_on'] != 'product',  # Product rules first
+                    -x['min_quantity']  # Higher quantities first
                 )
-            
-            price_info = self._get_product_price_data(product, pricelist, quantity, partner)
-            
-            return Response(
-                json.dumps({
-                    'success': True,
-                    'customer': {
-                        'id': partner.id if partner else None,
-                        'name': partner.name if partner else None,
-                        'pricelist': pricelist.name,
-                        'pricelist_id': pricelist.id,
-                    },
-                    'product': {
-                        'id': product.id,
-                        'name': product.name,
-                        'sku': product.default_code or '',
-                        'code_': product.code_ or '',
-                        'quantity': quantity,
-                        'prices': price_info,
-                        'uom': product.uom_id.name,
-                        'category': product.categ_id.name,
-                        'external_id': product.external_import_id or '',
-                    }
-                }), 
-                content_type='application/json'
             )
-                
+            
+            # For product-specific rules, check quantity requirements
+            product_rules = [r for r in sorted_rules if r['applied_on'] == 'product']
+            if product_rules:
+                for rule in product_rules:
+                    if quantity >= rule['min_quantity']:
+                        return rule['price']
+                return product_rules[-1]['price']  # Return price with lowest min_quantity
+            
+            # If no product-specific rules match, use category rule if exists
+            category_rules = [r for r in sorted_rules if r['applied_on'] == 'category']
+            if category_rules:
+                return category_rules[0]['price']
+            
+            return base_price
+        
         except Exception as e:
-            _logger.error(f"Error processing request: {str(e)}")
-            return Response(
-                json.dumps({
-                    'success': False,
-                    'error': str(e)
-                }), 
-                content_type='application/json',
-                status=500
-            )
+            _logger.error(f"Error calculating price: {str(e)}")
+            return base_price

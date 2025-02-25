@@ -33,13 +33,16 @@ class NoticationStorage(models.Model):
     _description = 'Notification Storage'
 
     message = fields.Text(string='Message', required=True)
-    patner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     title = fields.Char(string='Title', required=True)
     data = fields.Char(string='Data')
     include_player_ids = fields.Char(string='Include Player IDs', required=True)
     filter = fields.Char(string='Filter')
     read_status = fields.Boolean(string='Read Status', default=False)
+    patner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     
+    other_partner_id = fields.Many2one('res.partner', string='Other Customer', ondelete='cascade', required=False)
+    post_id = fields.Many2one('social_media.post', string='Post', ondelete='cascade', required=False)
+    comment_id = fields.Many2one('social_media.comment', string='Comment', ondelete='cascade', required=False)
     
 class NotificationStatus(models.Model):
     _name = 'notification.status'

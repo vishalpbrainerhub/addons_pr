@@ -2,10 +2,14 @@ from odoo import http
 from odoo.http import request, Response
 import json
 from .user_authentication import SocialMediaAuth
+from .helper_functions import ProductPriceController
 
 
 class EcommerceCartLine(http.Controller):
 
+
+        
+    
     @http.route('/api/cart_line', auth='public', type='http', methods=['GET'], csrf=False, cors='*')
     def get_cart_line(self):
         try:
@@ -28,16 +32,21 @@ class EcommerceCartLine(http.Controller):
             for line in cart_lines:
                 if line['product_uom_qty'] > 0:
                     product = request.env['product.product'].sudo().browse(line['product_id'][0])
+                    
+                    price = ProductPriceController.calculate_price_product(product.id, line['product_uom_qty'], partner_id)
+                    product_discount = getattr(product, 'discount', 0.0)
+                    price = price - (price * product_discount / 100)
                     test = {
                         'id': line['id'],
+                        'product_id': product.id,
                         'name': product.name,
-                        'list_price': line['price_unit'],
+                        'list_price': price*line['product_uom_qty'],
                         'quantity': line['product_uom_qty'],
                         'image': f'/web/image/product.product/{product.id}/image_1920' if product.image_1920 else None,
                         'barcode': product.barcode,
                         'active': product.active,
                         'color': getattr(product, 'color', None),
-                        'base_price': product.list_price,
+                        'base_price': price,
                         'discount': getattr(product, 'discount', 0.0),
                         'order_id': line['order_id'][0],
                         'code': getattr(product, 'code_', None)

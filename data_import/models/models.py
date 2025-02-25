@@ -6,6 +6,8 @@ import ast
 from contextlib import closing
 from threading import Thread, Lock
 from queue import Queue
+import random
+import os
 
 _logger = logging.getLogger(__name__)
 
@@ -132,7 +134,8 @@ class DataImporter(models.TransientModel):
                             'type': 'product',
                             'sale_ok': str(row.get('sale_ok', '')).lower() == 'true',
                             'purchase_ok': str(row.get('purchase_ok', '')).lower() == 'true',
-                            'external_id': external_product_id
+                            'external_id': external_product_id,
+                            'code_': random.randint(1000000000000, 9999999999999)
                         }
                         
                         product = env['product.template'].create(product_vals)
@@ -178,7 +181,7 @@ class DataImporter(models.TransientModel):
         
     def import_products(self):
         try:
-            file_path = '/home/dell/Documents/Projects/PrimaPaint/odoo-15.0/primapaint_addons/data_import/models/product-data.csv'
+            file_path = os.environ.get('PRODUCT_DATA_PATH')
             
             _logger.info(f"Attempting to open file at: {file_path}")
             

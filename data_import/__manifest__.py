@@ -19,7 +19,12 @@
     ],
     'data': [
         'security/ir.model.access.csv',
-        'views/import_views.xml'
+        'views/import_views.xml',
+        'data/product_import.xml',
+        'data/pricelist_import.xml',
+        'data/customer_import.xml',
+        'data/order_status.xml',
+        'data/order_export.xml',
     ],
     'installable': True,
     'application': True,

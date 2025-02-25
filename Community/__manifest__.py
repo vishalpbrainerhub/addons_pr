@@ -6,7 +6,10 @@
     "sequence": 10,
     "description": "This module enhances Odoo 15 by introducing advanced social media functionalities, allowing users to engage by posting images seamlessly.",
     "category": "Social Media Tools",
-    "depends": ["base"],
+    "depends": [ "base",
+        "mail",  # Since you're using mail templates
+        "web"    # For basic web functionality
+        ],
     "data": [
         "security/ir.model.access.csv",
         "views/post_views.xml"

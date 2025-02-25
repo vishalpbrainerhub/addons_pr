@@ -112,6 +112,7 @@ class NotificationController(http.Controller):
                 'message': str(e)
             }
     
+    
     @http.route('/api/notification_status', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_notification_status(self, **kwargs):
         if request.httprequest.method == 'OPTIONS':
@@ -134,10 +135,24 @@ class NotificationController(http.Controller):
             ], limit=1)
 
             if not status:
+                # Create default notification status if not found
+                status = request.env['notification.status'].sudo().create({
+                    'community': True,
+                    'promo': True,
+                    'order': True,
+                    'partner_id': customer_id
+                })
+                
                 return Response(json.dumps({
-                    'status': 'error',
-                    'message': 'Notification status not found'
-                }), content_type='application/json', headers=headers, status=404)
+                    'status': 'success',
+                    'data': {
+                        'id': status.id,
+                        'community': status.community,
+                        'promo': status.promo,
+                        'order': status.order
+                    }
+                }), content_type='application/json', headers=headers
+                )
 
             return Response(json.dumps({
                 'status': 'success',

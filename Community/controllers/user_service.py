@@ -80,7 +80,7 @@ class Users(http.Controller):
 
             payload = {
                 'user_id': customer.id,
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=2)
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=240)
             }
             
             secret_key = os.environ["JWT_SECRET_KEY"]
@@ -154,6 +154,7 @@ class Users(http.Controller):
     @http.route('/user/register', type='json', auth='public', methods=['POST', 'OPTIONS'], csrf=False)
     def register(self):
         try:
+            print("--------------------coming")
             name = request.jsonrequest.get('name')
             email = request.jsonrequest.get('email')
             password = request.jsonrequest.get('password')

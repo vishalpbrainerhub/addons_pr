@@ -5,6 +5,9 @@ from .user_authentication import SocialMediaAuth
 import random
 import math
 from .helper_functions import ProductPriceController
+import os
+import base64
+
 
 class MobileEcommerceApiController(http.Controller):    
     
@@ -262,9 +265,23 @@ class MobileEcommerceApiController(http.Controller):
                 if product['discount']:
                     final_price = final_price * (1 - (product['discount'] / 100))
                 
-                ProductPriceController.upload_product_image( product['image_1920'],product['id'])
-                image = ProductPriceController.get_product_image(product['id'])
                 
+                image = product['image_1920'] or None
+                product_image_name = f'product_{random.randint(1, 1000)}_image.png'
+                pr_id = product['id']
+                image_path = f"images/products/{pr_id}"
+                
+                if image:
+                    save_dir = os.path.join('/mnt/data/images', 'products', str(pr_id))
+                    os.makedirs(save_dir, exist_ok=True)
+                    
+                    # Clean existing files
+                    for file in os.listdir(save_dir):
+                        os.remove(os.path.join(save_dir, file))
+                        
+                    # Save new image
+                    with open(os.path.join(save_dir, product_image_name), 'wb') as f:
+                        f.write(base64.b64decode(image))
                 
 
                 product_data = {
@@ -284,7 +301,7 @@ class MobileEcommerceApiController(http.Controller):
                     'discounted_price': final_price*quantity,
                     'min_quantity': product.get('min_quantity'),
                     'category_id': product['category_id'],
-                    'image': image
+                    'image': image_path
                 }
                 product_list.append(product_data)
 

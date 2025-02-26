@@ -266,22 +266,22 @@ class MobileEcommerceApiController(http.Controller):
                     final_price = final_price * (1 - (product['discount'] / 100))
                 
                 
-                image = product['image_1920'] or None
-                product_image_name = f'product_{random.randint(1, 1000)}_image.png'
+                # image = product['image_1920'] or None
+                # product_image_name = f'product_{random.randint(1, 1000)}_image.png'
                 pr_id = product['id']
-                image_path = f"/images/products/{pr_id}/{product_image_name}"
+                # image_path = f"/images/products/{pr_id}/{product_image_name}"
                 
-                if image:
-                    save_dir = os.path.join('/mnt/data/images', 'products', str(pr_id))
-                    os.makedirs(save_dir, exist_ok=True)
+                # if image:
+                #     save_dir = os.path.join('/mnt/data/images', 'products', str(pr_id))
+                #     os.makedirs(save_dir, exist_ok=True)
                     
-                    # Clean existing files
-                    for file in os.listdir(save_dir):
-                        os.remove(os.path.join(save_dir, file))
+                #     # Clean existing files
+                #     for file in os.listdir(save_dir):
+                #         os.remove(os.path.join(save_dir, file))
                         
-                    # Save new image
-                    with open(os.path.join(save_dir, product_image_name), 'wb') as f:
-                        f.write(base64.b64decode(image))
+                #     # Save new image
+                #     with open(os.path.join(save_dir, product_image_name), 'wb') as f:
+                #         f.write(base64.b64decode(image))
                 
 
                 product_data = {
@@ -301,7 +301,7 @@ class MobileEcommerceApiController(http.Controller):
                     'discounted_price': final_price*quantity,
                     'min_quantity': product.get('min_quantity'),
                     'category_id': product['category_id'],
-                    'image': image_path
+                    'image': f'/web/image/product.product/{pr_id}/image_1920' if product['image_1920'] else None,
                 }
                 product_list.append(product_data)
 

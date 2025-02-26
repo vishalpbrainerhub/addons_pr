@@ -31,9 +31,11 @@ class EcommerceCartLine(http.Controller):
             cart = []
             for line in cart_lines:
                 if line['product_uom_qty'] > 0:
-                    product = request.env['product.product'].sudo().browse(line['product_id'][0])
+                    product = request.env['product.template'].sudo().browse(line['product_id'][0])
                     
+                    print("product", product.id,"line", line['product_uom_qty'], "partner", partner_id)
                     price = ProductPriceController.calculate_price_product(product.id, line['product_uom_qty'], partner_id)
+                    print("price", price)
                     product_discount = getattr(product, 'discount', 0.0)
                     price = price - (price * product_discount / 100)
                     test = {
@@ -108,23 +110,30 @@ class EcommerceCartLine(http.Controller):
                     'info': 'Product ID, quantity, and price are required.'
                 }, 400
 
-            product = request.env['product.product'].sudo().browse(product_id)
+            product = request.env['product.template'].sudo().browse(product_id)
             if not product.exists():
-                template = request.env['product.template'].sudo().browse(product_id)
-                if template.exists():
-                    product = template.product_variant_ids[0]
-                    if not product:
-                        return {
-                            'status': 'error',
-                            'message': 'La variante del prodotto specificata non esiste o è stata eliminata.',
-                            'info': 'The specified product variant does not exist or has been deleted.'
-                        }, 400
-                else:
-                    return {
-                        'status': 'error',
-                        'message': 'Il prodotto specificato non esiste o è stato eliminato.',
-                        'info': 'The specified product does not exist or has been deleted.'
-                    }, 400
+                return {
+                    'status': 'error',
+                    'message': 'Il prodotto specificato non esiste o è stato eliminato.',
+                    'info': 'The specified product does not exist or has been deleted.'
+                }, 400
+            # if not product.exists():
+            #     print("product not found")
+            #     template = request.env['product.template'].sudo().browse(product_id)
+            #     if template.exists():
+            #         product = template.product_variant_ids[0]   
+            #         if not product:
+            #             return {
+            #                 'status': 'error',
+            #                 'message': 'La variante del prodotto specificata non esiste o è stata eliminata.',
+            #                 'info': 'The specified product variant does not exist or has been deleted.'
+            #             }, 400
+            #     else:
+            #         return {
+            #             'status': 'error',
+            #             'message': 'Il prodotto specificato non esiste o è stato eliminato.',
+            #             'info': 'The specified product does not exist or has been deleted.'
+            #         }, 400
 
             price_unit = price_unit - (price_unit * product.discount / 100)
 

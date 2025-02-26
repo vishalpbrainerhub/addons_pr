@@ -32,13 +32,12 @@ class ProductPriceController(http.Controller):
         try:
             # Get product
             env = request.env
-            product = env['product.product'].sudo().browse(product_id)
-            
+            product = env['product.template'].sudo().browse(product_id)
             # If product not found, try getting from template
-            if not product:
-                template = env['product.template'].sudo().browse(product_id)
-                if template:
-                    product = template.product_variant_id
+            # if not product:
+            #     template = env['product.template'].sudo().browse(product_id)
+            #     if template:
+            #         product = template.product_variant_id
             
             if not product:
                 return 0
@@ -56,12 +55,11 @@ class ProductPriceController(http.Controller):
             # Get matching pricelist items for both product and category
             price_rules = []
             base_price = product.list_price
-            
             for item in price_list.item_ids:
-                # Check for product-specific rules
-                if (item.product_tmpl_id.id == product.product_tmpl_id.id or 
-                    item.product_id.id == product.id):
-
+                
+                
+                if (item.product_tmpl_id.id ==  product.id):
+                    print("coming here")
                     price = 0
                     if item.compute_price == 'fixed':
                         price = item.fixed_price
@@ -77,7 +75,7 @@ class ProductPriceController(http.Controller):
                     })
                 
                 # Check for category-based rules
-                elif item.categ_id:
+                elif item.categ_id == product.categ_id:
                     price = 0
                     if item.compute_price == 'fixed':
                         price = item.fixed_price
@@ -91,22 +89,25 @@ class ProductPriceController(http.Controller):
                         'price': price,
                         'applied_on': 'category',
                     })
+                    
+                continue
 
             if not price_rules:
                 return base_price
             
+            print("price_rules", price_rules)
             # Sort rules by sequence and min_quantity
             # Product-specific rules take precedence over category rules
             sorted_rules = sorted(
                 price_rules, 
                 key=lambda x: (
-                    x['applied_on'] != 'product',  # Product rules first
                     -x['min_quantity']  # Higher quantities first
                 )
             )
             
+            
             # For product-specific rules, check quantity requirements
-            product_rules = [r for r in sorted_rules if r['applied_on'] == 'product']
+            product_rules = [r for r in sorted_rules]
             if product_rules:
                 for rule in product_rules:
                     if quantity >= rule['min_quantity']:

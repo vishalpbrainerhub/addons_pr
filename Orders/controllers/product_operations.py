@@ -4,6 +4,7 @@ import json
 from .user_authentication import SocialMediaAuth
 import random
 import math
+from .helper_functions import ProductPriceController
 
 class MobileEcommerceApiController(http.Controller):    
     
@@ -137,6 +138,8 @@ class MobileEcommerceApiController(http.Controller):
                         elif item.compute_price == 'formula':
                             price = product_info['list_price'] * (1 - (item.price_discount / 100))
                             
+                            
+                            
                         product_dict = {
                             'name': product_info['name'],
                             'list_price': price,
@@ -153,6 +156,15 @@ class MobileEcommerceApiController(http.Controller):
                         }
                         if product_info['id'] not in [p['id'] for p in data]:
                             data.append(product_dict)
+                        else:
+                            for p in data:
+                                if p['id'] == product_info['id']:
+                                    dict = {
+                                        'min_quantity': 0,
+                                        'price': price
+                                    }
+                                    p['min_quantity'].append(dict)
+                                    break
                         
                 else:
                     print("Global Price:", item.fixed_price)
@@ -170,10 +182,9 @@ class MobileEcommerceApiController(http.Controller):
             'has_next': page < math.ceil(total_items / page_size) if total_items > 0 else False,
             'has_previous': page > 1
         }
-        
         return data, pagination_info
     
-    @http.route('/api/products', auth='none', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
+    @http.route('/api/products', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_products(self):
         if request.httprequest.method == 'OPTIONS':
             headers = {
@@ -233,6 +244,7 @@ class MobileEcommerceApiController(http.Controller):
                 cart_lines_map.append(dict)
 
             product_list = []
+            
             for product in products_data:
                 product_template = request.env['product.product'].sudo().search([('product_tmpl_id', '=', product['id'])])
                 cart_line = None
@@ -244,14 +256,14 @@ class MobileEcommerceApiController(http.Controller):
                 quantity = cart_line['product_uom_qty'] if cart_line else 0
                 cart_line_id = cart_line['cart_line_id'] if cart_line else None
                 
+                
+                final_price = ProductPriceController.calculate_price_product(product["id"], quantity, partner_id)
                 if product['discount']:
-                    product['list_price'] = product['list_price'] * (1 - (product['discount'] / 100))
-                
-                
+                    final_price = final_price * (1 - (product['discount'] / 100))
                 
                 product_data = {
                     'name': product['name'],
-                    'list_price': product['list_price'],
+                    'list_price': final_price,
                     'active': product['active'], 
                     'barcode': product['barcode'],
                     'color': product['color'],
@@ -462,7 +474,7 @@ class MobileEcommerceApiController(http.Controller):
 
             partner_id = user_info['user_id']
             print("Product id", product_id)
-            product = request.env['product.product'].sudo().search([('product_tmpl_id', '=', product_id)], limit=1)
+            product = request.env['product.template'].sudo().search([('id', '=', product_id)], limit=1)
             if not product:
                 return {
                     'status': 'error',

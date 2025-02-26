@@ -331,8 +331,38 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
+    @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
+    def get_product_image(self, product_id, image):
+        try:
+            base_path = '/mnt/data/images'
+            image_path = os.path.join(base_path, 'products', str(product_id), image.lstrip('/'))
+            safe_path = os.path.join(base_path, 'products', str(product_id))
+            
+            # Security check to prevent directory traversal
+            if not os.path.abspath(image_path).startswith(os.path.abspath(safe_path)):
+                return Response(json.dumps({
+                    'error': {'message': 'Invalid image path'},
+                    'status': 'error',
+                    'status_code': '403'
+                }), content_type='application/json', status=403)
 
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as f:
+                    return Response(f.read(), content_type='image/png')
 
+            return Response(json.dumps({
+                'error': {'message': 'Product image not found'},
+                'status': 'error',
+                'status_code': '404'
+            }), content_type='application/json', status=404)
+
+        except Exception as e:
+            return Response(json.dumps({
+                'error': {'message': 'Server error'},
+                'status': 'error', 
+                'status_code': '500'
+            }), content_type='application/json', status=500)
+    
     @http.route('/api/products/<int:product_code>', auth='none', type='http', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def get_product(self, product_code):
         """

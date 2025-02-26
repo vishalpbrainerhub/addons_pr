@@ -269,7 +269,7 @@ class MobileEcommerceApiController(http.Controller):
                 image = product['image_1920'] or None
                 product_image_name = f'product_{random.randint(1, 1000)}_image.png'
                 pr_id = product['id']
-                image_path = f"images/products/{pr_id}"
+                image_path = f"/images/products/{pr_id}/{product_image_name}"
                 
                 if image:
                     save_dir = os.path.join('/mnt/data/images', 'products', str(pr_id))

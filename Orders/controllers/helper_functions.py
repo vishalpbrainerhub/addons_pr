@@ -4,17 +4,12 @@ from odoo.http import request, Response
 from odoo.exceptions import UserError, ValidationError
 from datetime import datetime
 import logging
+import os
+import random
+import base64
 
 _logger = logging.getLogger(__name__)
 
-import json
-from odoo import http, fields, _
-from odoo.http import request, Response
-from odoo.exceptions import UserError, ValidationError
-from datetime import datetime
-import logging
-
-_logger = logging.getLogger(__name__)
 
 class ProductPriceController(http.Controller):
     
@@ -122,3 +117,36 @@ class ProductPriceController(http.Controller):
         except Exception as e:
             _logger.error(f"Error calculating price: {str(e)}")
             return base_price
+        
+                
+    def upload_product_image(image_file, product_id):
+        """
+        Save an uploaded image to a designated directory on the server and return its path.
+        Parameters:
+            image_file (File): The image file to be saved.
+        Returns:
+            str: The path to the saved image.
+        """
+        base_path = '/mnt/data/images'
+        save_directory = os.path.join(base_path, 'products', str(product_id))
+        os.makedirs(save_directory, exist_ok=True)
+        
+        # Clean up existing files
+        for file in os.listdir(save_directory):
+            os.remove(os.path.join(save_directory, file))
+            
+        file_path = os.path.join(save_directory, f'product_image_{random.randint(100000, 999999)}.png')
+        
+        with open(file_path, 'wb') as file:
+            file.write(image_file.read())
+
+        return file_path
+    
+    
+    def get_base_image_path(product_id):
+        image_dir = os.path.join('images', 'products', str(product_id))
+        base_path = os.path.join('/mnt/data', image_dir)
+    
+        if os.path.exists(base_path) and os.listdir(base_path):
+            return os.path.join(image_dir, os.listdir(base_path)[0])
+        return 'None'

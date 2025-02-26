@@ -70,7 +70,7 @@ class MobileEcommerceApiController(http.Controller):
 
                     product_info = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score' ,'categ_id', 'code_'
+                        'is_published', 'rewards_score' ,'categ_id', 'code_','image_1920'
                     ])
                     
                     # Skip if no product found
@@ -97,7 +97,8 @@ class MobileEcommerceApiController(http.Controller):
                         'rewards_score': product_info[0].get('rewards_score', 0),
                         'code_': product_info[0].get('code_', False),
                         'min_quantity': [{"min_quantity": item.min_quantity, "price": price}],
-                        'category_id': product_info[0]['categ_id'][0]
+                        'category_id': product_info[0]['categ_id'][0],
+                        'image_1920': product_info[0]['image_1920'] or ''
                     }
                     if item.product_tmpl_id.id not in [p['id'] for p in data]:
                         data.append(product_dict)
@@ -124,7 +125,7 @@ class MobileEcommerceApiController(http.Controller):
                     
                     products_in_category = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score', 'code_', 'categ_id'
+                        'is_published', 'rewards_score', 'code_', 'categ_id','image_1920'
                     ])
                     
                     # Process each product in the category
@@ -151,7 +152,8 @@ class MobileEcommerceApiController(http.Controller):
                             'rewards_score': product_info.get('rewards_score', 0),
                             'code_': product_info.get('code_', False),
                             'min_quantity': 0,
-                            'category_id': product_info['categ_id'][0]
+                            'category_id': product_info['categ_id'][0],
+                            'image_1920': product_info['image_1920'] or ''
                         }
                         if product_info['id'] not in [p['id'] for p in data]:
                             data.append(product_dict)
@@ -260,6 +262,11 @@ class MobileEcommerceApiController(http.Controller):
                 if product['discount']:
                     final_price = final_price * (1 - (product['discount'] / 100))
                 
+                ProductPriceController.upload_product_image( product['image_1920'],product['id'])
+                image = ProductPriceController.get_product_image(product['id'])
+                
+                
+
                 product_data = {
                     'name': product['name'],
                     'list_price': final_price,
@@ -276,7 +283,8 @@ class MobileEcommerceApiController(http.Controller):
                     'code': product["code_"] if product["code_"] else None,
                     'discounted_price': final_price*quantity,
                     'min_quantity': product.get('min_quantity'),
-                    'category_id': product['category_id']
+                    'category_id': product['category_id'],
+                    'image': image
                 }
                 product_list.append(product_data)
 

@@ -973,7 +973,6 @@ class SocialMedia(http.Controller):
             # Verify customer
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', user_auth['user_id']),
-                
             ], limit=1)
 
             if not customer:
@@ -1001,7 +1000,6 @@ class SocialMedia(http.Controller):
             # Fetch the customer to block
             blocked_customer = request.env['res.partner'].sudo().search([
                 ('id', '=', blocked_customer_id),
-                
             ], limit=1)
 
             if not blocked_customer:
@@ -1011,24 +1009,23 @@ class SocialMedia(http.Controller):
                     "info": "No customer found with the provided ID"
                 }, 404
 
-            # Check if the customer is already blocked
-            already_blocked = request.env['social_media.blocked_customer'].search([
-                ('customer_id', '=', customer.id),
-                ('blocked_customer_id', '=', blocked_customer.id)
-            ])
+            # Check if the customer is already blocked using the Many2many relation
+            already_blocked = blocked_customer.id in customer.blocked_customers.ids
 
             if already_blocked:
-                already_blocked.unlink()
+                # Unblock the customer by removing from the Many2many relation
+                customer.write({
+                    'blocked_customers': [(3, blocked_customer.id)]
+                })
                 return {
                     "status": "success",
                     "message": "Cliente sbloccato con successo",
                     "info": "The customer has been successfully unblocked"
                 }
 
-            # Create new block record
-            request.env['social_media.blocked_customer'].create({
-                'customer_id': customer.id,
-                'blocked_customer_id': blocked_customer.id
+            # Block the customer by adding to the Many2many relation
+            customer.write({
+                'blocked_customers': [(4, blocked_customer.id)]
             })
 
             return {
@@ -1038,6 +1035,7 @@ class SocialMedia(http.Controller):
             }
 
         except Exception as e:
+            logging.error(f"Error in block_user: {str(e)}")
             return {
                 "status": "error",
                 "message": "Errore del server interno",

@@ -35,7 +35,6 @@ class MobileEcommerceApiController(http.Controller):
         """, (partner_id,))
         
         result = cr.fetchone()
-        print("SQL Result:", result)
         data = []
         total_items = 0
         
@@ -275,7 +274,7 @@ class MobileEcommerceApiController(http.Controller):
                     'is_published': product["is_published"],
                     'rewards_score': product["rewards_score"],
                     'code': product["code_"] if product["code_"] else None,
-                    'discounted_price': product['list_price']*quantity,
+                    'discounted_price': final_price*quantity,
                     'min_quantity': product.get('min_quantity'),
                     'category_id': product['category_id']
                 }
@@ -473,7 +472,6 @@ class MobileEcommerceApiController(http.Controller):
                 }, 401
 
             partner_id = user_info['user_id']
-            print("Product id", product_id)
             product = request.env['product.template'].sudo().search([('id', '=', product_id)], limit=1)
             if not product:
                 return {

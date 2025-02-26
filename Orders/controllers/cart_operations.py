@@ -33,9 +33,8 @@ class EcommerceCartLine(http.Controller):
                 if line['product_uom_qty'] > 0:
                     product = request.env['product.template'].sudo().browse(line['product_id'][0])
                     
-                    print("product", product.id,"line", line['product_uom_qty'], "partner", partner_id)
                     price = ProductPriceController.calculate_price_product(product.id, line['product_uom_qty'], partner_id)
-                    print("price", price)
+
                     product_discount = getattr(product, 'discount', 0.0)
                     price = price - (price * product_discount / 100)
                     test = {
@@ -118,7 +117,6 @@ class EcommerceCartLine(http.Controller):
                     'info': 'The specified product does not exist or has been deleted.'
                 }, 400
             # if not product.exists():
-            #     print("product not found")
             #     template = request.env['product.template'].sudo().browse(product_id)
             #     if template.exists():
             #         product = template.product_variant_ids[0]   

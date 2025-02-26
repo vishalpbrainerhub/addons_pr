@@ -59,7 +59,6 @@ class ProductPriceController(http.Controller):
                 
                 
                 if (item.product_tmpl_id.id ==  product.id):
-                    print("coming here")
                     price = 0
                     if item.compute_price == 'fixed':
                         price = item.fixed_price
@@ -95,7 +94,6 @@ class ProductPriceController(http.Controller):
             if not price_rules:
                 return base_price
             
-            print("price_rules", price_rules)
             # Sort rules by sequence and min_quantity
             # Product-specific rules take precedence over category rules
             sorted_rules = sorted(

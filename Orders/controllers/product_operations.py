@@ -643,19 +643,27 @@ class MobileEcommerceApiController(http.Controller):
 
             # Dictionary to keep track of unique external_ids
             unique_categories = {}
-            
+
             for category in categories:
                 # Only keep the first occurrence of each external_id
                 if category.external_id not in unique_categories:
+                    # Get complete name and remove "All / Saleable / " prefix if it exists
+                    modified_complete_name = category.complete_name
+                    if modified_complete_name.startswith("All / Saleable / "):
+                        modified_complete_name = modified_complete_name[16:]  # Skip the "All / Saleable / " part
+                    
                     unique_categories[category.external_id] = {
                         'id': category.id,
                         'name': category.name,
                         'external_id': category.external_id,
-                        'complete_name': category.complete_name
+                        'complete_name': modified_complete_name  # Store the modified name directly in complete_name
                     }
 
             # Convert dictionary values to list
             category_list = list(unique_categories.values())
+            
+            # loop over the category list and hide the All/Sealable/ part from complete name show the other part
+            
 
             response_data = {
                 'status': 'success',

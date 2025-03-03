@@ -550,6 +550,17 @@ class MobileEcommerceApiController(http.Controller):
             ], limit=1)
 
             if not sale_order:
+                # create sale order
+                partner_pricelist = request.env['res.partner'].sudo().browse(partner_id).property_product_pricelist
+                print("Partner Pricelist:", partner_pricelist,"------------555---------------")
+                sale_order = request.env['sale.order'].sudo().create({
+                    'partner_id': partner_id,
+                    'partner_invoice_id': partner_id,
+                    'partner_shipping_id': partner_id,
+                    'pricelist_id': partner_pricelist.id,
+                    'company_id': 1
+                })
+                
                 return {
                     'status': 'error',
                     'message': 'Nessun ordine di vendita trovato per questo utente',

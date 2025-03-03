@@ -552,7 +552,6 @@ class MobileEcommerceApiController(http.Controller):
             if not sale_order:
                 # create sale order
                 partner_pricelist = request.env['res.partner'].sudo().browse(partner_id).property_product_pricelist
-                print("Partner Pricelist:", partner_pricelist,"------------555---------------")
                 sale_order = request.env['sale.order'].sudo().create({
                     'partner_id': partner_id,
                     'partner_invoice_id': partner_id,
@@ -560,12 +559,7 @@ class MobileEcommerceApiController(http.Controller):
                     'pricelist_id': partner_pricelist.id,
                     'company_id': 1
                 })
-                
-                return {
-                    'status': 'error',
-                    'message': 'Nessun ordine di vendita trovato per questo utente',
-                    'info': 'Sale order not found for this user'
-                }, 404
+            
 
             env = request.env['sale.order.line'].with_company(sale_order.company_id)
             order_line = env.sudo().search([('product_id', '=', product.id), ('order_id', '=', sale_order.id)])

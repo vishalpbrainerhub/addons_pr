@@ -506,7 +506,7 @@ class MobileEcommerceApiController(http.Controller):
     
         
 
-    @http.route('/api/products/<int:product_id>', auth='none', type='json', methods=['PUT', 'OPTIONS'], csrf=False, cors='*')
+    @http.route('/api/products/<int:product_id>', auth='public', type='json', methods=['PUT', 'OPTIONS'], csrf=False, cors='*')
     def update_product_quantity(self, product_id):
         if request.httprequest.method == 'OPTIONS':
             headers = {
@@ -517,7 +517,7 @@ class MobileEcommerceApiController(http.Controller):
             }
             return Response(status=204, headers=headers)
 
-        try:        
+        try:
             user_info = SocialMediaAuth.user_auth(self)
             if user_info['status'] == 'error':
                 return {
@@ -527,6 +527,7 @@ class MobileEcommerceApiController(http.Controller):
                 }, 401
 
             partner_id = user_info['user_id']
+            print("Partner ID:", partner_id)
             product = request.env['product.template'].sudo().search([('id', '=', product_id)], limit=1)
             if not product:
                 return {
@@ -543,51 +544,17 @@ class MobileEcommerceApiController(http.Controller):
                     'info': 'Quantity must be a non-negative number'
                 }, 400
 
-            # Find existing draft sale order
             sale_order = request.env['sale.order'].sudo().search([
                 ('partner_id', '=', partner_id), 
                 ('state', '=', 'draft')
             ], limit=1)
 
-            # Create new sale order if none exists
             if not sale_order:
-                partner = request.env['res.partner'].sudo().browse(partner_id)
-                if not partner.exists():
-                    return {
-                        'status': 'error',
-                        'message': 'Partner non trovato',
-                        'info': 'Partner not found'
-                    }, 404
-                    
-                # Get pricelist for the partner
-                cr = request.env.cr
-                cr.execute("""
-                    SELECT 
-                        rp.id as partner_id,
-                        pp.id as pricelist_id
-                    FROM res_partner rp
-                    LEFT JOIN ir_property ip ON ip.res_id = CONCAT('res.partner,', rp.id)
-                    LEFT JOIN product_pricelist pp ON pp.id = CAST(SUBSTRING(ip.value_reference FROM 'product.pricelist,(.*)') AS INTEGER)
-                    WHERE ip.name = 'property_product_pricelist'
-                    AND rp.id = %s
-                """, (partner_id,))
-                
-                result = cr.fetchone()
-                pricelist_id = result[1] if result and result[1] else False
-                
-                # Create new sale order
-                SaleOrder = request.env['sale.order'].sudo()
-                vals = {
-                    'partner_id': partner_id,
-                    'state': 'draft',
-                    'date_order': fields.Datetime.now(),
-                }
-                
-                # Add pricelist if available
-                if pricelist_id:
-                    vals['pricelist_id'] = pricelist_id
-                
-                sale_order = SaleOrder.create(vals)
+                return {
+                    'status': 'error',
+                    'message': 'Nessun ordine di vendita trovato per questo utente',
+                    'info': 'Sale order not found for this user'
+                }, 404
 
             env = request.env['sale.order.line'].with_company(sale_order.company_id)
             order_line = env.sudo().search([('product_id', '=', product.id), ('order_id', '=', sale_order.id)])
@@ -612,20 +579,14 @@ class MobileEcommerceApiController(http.Controller):
                         'cart_line_id': order_line.id
                     }
             else:
-                # Calculate correct price based on pricelist if available
-                price = product.list_price
-                
-                # Find if there's a pricelist from the sale order
-                if sale_order.pricelist_id:
-                    pricelist = sale_order.pricelist_id
-                    price = ProductPriceController.calculate_price_product(product.id, quantity, partner_id)
+                # find the product id in pricelist items for price based on customer pricelist
                 
                 if quantity > 0:
                     new_line = env.sudo().create({
                         'order_id': sale_order.id,
                         'product_id': product.id,
                         'product_uom_qty': quantity,
-                        'price_unit': price,
+                        'price_unit': product.list_price,
                     })
                     return {
                         'status': 'success',
@@ -646,6 +607,7 @@ class MobileEcommerceApiController(http.Controller):
                 'message': 'Errore del server interno',
                 'info': str(e)
             }, 500
+
 
 
     @http.route('/api/categories', auth='none', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')

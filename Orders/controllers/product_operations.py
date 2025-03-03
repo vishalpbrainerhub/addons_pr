@@ -517,7 +517,7 @@ class MobileEcommerceApiController(http.Controller):
             }
             return Response(status=204, headers=headers)
 
-        try:
+        try:        
             user_info = SocialMediaAuth.user_auth(self)
             if user_info['status'] == 'error':
                 return {

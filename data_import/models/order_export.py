@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from odoo import models, fields, api
 import logging
+from odoo.http import request, Response
 
 
 _logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ class OrderExportCron(models.Model):
 
     def _export_orders(self):
         try:
-            out_dir = os.environ.get("EXPORT_OUTPUT_DIR", "/tmp/odoo_exports")
+            out_dir = '/home/dell/Documents/Projects/PrimaPaint/odoo-15.0/primapaint_addons/Orders/controllers'
             os.makedirs(out_dir, exist_ok=True)
             filename = f'{out_dir}/orders_export.csv'
             
@@ -86,8 +87,11 @@ class OrderExportCron(models.Model):
                     for line in order.order_line:
                         try:
                             row = base_row.copy()
+                            
+                            product_external_id = request.env['product.template'].sudo().search([('id', '=', line.product_id.id)], limit=1).external_id
                             row.update({
-                                'order_line/product_id': line.product_id.id if line.product_id else '',
+                                # 'order_line/product_id': line.product_id.id if line.product_id else '',
+                                'order_line/product_id': product_external_id,
                                 'order_line/product_uom_qty': line.product_uom_qty,
                                 'order_line/price_unit': line.price_unit
                             })

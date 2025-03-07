@@ -14,7 +14,7 @@ class OrderExportCron(models.Model):
 
     def _export_orders(self):
         try:
-            out_dir = '/home/dell/Documents/Projects/PrimaPaint/odoo-15.0/primapaint_addons/Orders/controllers'
+            out_dir = os.environ.get('EXPORT_OUTPUT_DIR')
             os.makedirs(out_dir, exist_ok=True)
             filename = f'{out_dir}/orders_export.csv'
             

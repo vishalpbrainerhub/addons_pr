@@ -261,123 +261,124 @@ class Ecommerce_orders(http.Controller):
                     'info': f'Minimum quantity not met for some products. Minimum {min_required} required.',
                     'invalid_items': invalid_quantities
                 }, 400
+            else:
 
-            # Update prices based on pricelist before confirming
-            for line in order_line:
-                product_product = request.env['product.product'].sudo().browse(line.product_id.id)
-                product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                price = ProductPriceController.calculate_price_product(
-                    product_tmpl.id, 
-                    line.product_uom_qty,
-                    partner_id
-                )
-                if price:
-                    line.sudo().write({'price_unit': price})
-
-            # Confirm order
-            order.sudo().action_confirm()
-
-            # Handle rewards points
-            total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
-            if total_points > 0:
-                request.env['rewards.points'].sudo().create({
-                    'user_id': partner_id,
-                    'order_id': order.id,
-                    'points': total_points,
-                    'status': 'gain'
-                })
-
-                total_points_obj = request.env['rewards.totalpoints'].sudo().search([
-                    ('user_id', '=', partner_id)
-                ], limit=1)
-                
-                if total_points_obj:
-                    total_points_obj.sudo().write({
-                        'total_points': total_points_obj.total_points + total_points
-                    })
-                else:
-                    request.env['rewards.totalpoints'].sudo().create({
-                        'user_id': partner_id,
-                        'total_points': total_points
-                    })
-
-            # Get shipping address
-            user_address = request.env['social_media.custom_address'].sudo().search([
-                ('id', '=', order.shipping_address_id)
-            ])
-
-            shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
-
-            # Send confirmation email
-            template = request.env['mail.template'].sudo().create({
-                'name': 'Conferma Ordine',
-                'email_from': 'admin@primapaint.com',
-                'email_to': f"{order.partner_id.email}, staff@primapaint.it",
-                'subject': f'Ordine #{order.name} Confermato',
-                'body_html': f'''
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <h2 style="color: #2C3E50;">Conferma Ordine</h2>
-                        
-                        <p>Caro/a {order.partner_id.name},</p>
-                        
-                        <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
-                        
-                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                            <p><strong>Numero Ordine:</strong> {order.name}</p>
-                            <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
-                            <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
-                        </div>
-
-                        <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
-                        <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                            {order.partner_shipping_id.street or ''}<br>
-                            {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
-                            {order.partner_shipping_id.country_id.name or ''}
-                        </p>
-
-                        <p style="color: #666; margin-top: 30px; font-size: 12px;">
-                            Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
-                        </p>
-                    </div>
-                ''',
-                'model_id': request.env['ir.model']._get('sale.order').id,
-                'auto_delete': True
-            })
-            template.send_mail(order.id, force_send=True)
-
-            # Handle notifications
-            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-            if filter_notification.order:
-                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-                device_token = customer.onesignal_player_id       
-                if device_token:
-                    notification_service.send_onesignal_notification(
-                        device_token,
-                        'Ordine confermato con successo',
-                        'Ordine Confermato',
-                        {'type': 'order_confirmed'}
+                # Update prices based on pricelist before confirming
+                for line in order_line:
+                    product_product = request.env['product.product'].sudo().browse(line.product_id.id)
+                    product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
+                    price = ProductPriceController.calculate_price_product(
+                        product_tmpl.id, 
+                        line.product_uom_qty,
+                        partner_id
                     )
-                    
-                    request.env['notification.storage'].sudo().create({
-                        'message': 'Ordine confermato con successo',
-                        'patner_id': partner_id,
-                        'title': 'Ordine Confermato',
-                        'data': {'type': 'order_confirmed'},
-                        'include_player_ids': device_token,
-                        'filter': 'order'
+                    if price:
+                        line.sudo().write({'price_unit': price})
+
+                # Confirm order
+                order.sudo().action_confirm()
+
+                # Handle rewards points
+                total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
+                if total_points > 0:
+                    request.env['rewards.points'].sudo().create({
+                        'user_id': partner_id,
+                        'order_id': order.id,
+                        'points': total_points,
+                        'status': 'gain'
                     })
 
-            return {
-                'status': 'success',
-                'message': 'Ordine confermato con successo e carrello svuotato.',
-                'info': 'Order confirmed successfully and cart emptied.',
-                'order_id': order.id,
-                'order_state': order.state,
-                'order_amount_total': order.amount_total,
-                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
-                'partner_address': shipping_address,
-                'reward_points_earned': total_points if total_points > 0 else 0
-            }
+                    total_points_obj = request.env['rewards.totalpoints'].sudo().search([
+                        ('user_id', '=', partner_id)
+                    ], limit=1)
+                    
+                    if total_points_obj:
+                        total_points_obj.sudo().write({
+                            'total_points': total_points_obj.total_points + total_points
+                        })
+                    else:
+                        request.env['rewards.totalpoints'].sudo().create({
+                            'user_id': partner_id,
+                            'total_points': total_points
+                        })
+
+                # Get shipping address
+                user_address = request.env['social_media.custom_address'].sudo().search([
+                    ('id', '=', order.shipping_address_id)
+                ])
+
+                shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+
+                # Send confirmation email
+                template = request.env['mail.template'].sudo().create({
+                    'name': 'Conferma Ordine',
+                    'email_from': 'admin@primapaint.com',
+                    'email_to': f"{order.partner_id.email}, staff@primapaint.it",
+                    'subject': f'Ordine #{order.name} Confermato',
+                    'body_html': f'''
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                            <h2 style="color: #2C3E50;">Conferma Ordine</h2>
+                            
+                            <p>Caro/a {order.partner_id.name},</p>
+                            
+                            <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
+                            
+                            <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                                <p><strong>Numero Ordine:</strong> {order.name}</p>
+                                <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                                <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                            </div>
+
+                            <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
+                            <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                                {order.partner_shipping_id.street or ''}<br>
+                                {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
+                                {order.partner_shipping_id.country_id.name or ''}
+                            </p>
+
+                            <p style="color: #666; margin-top: 30px; font-size: 12px;">
+                                Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
+                            </p>
+                        </div>
+                    ''',
+                    'model_id': request.env['ir.model']._get('sale.order').id,
+                    'auto_delete': True
+                })
+                template.send_mail(order.id, force_send=True)
+
+                # Handle notifications
+                filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                if filter_notification.order:
+                    customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    device_token = customer.onesignal_player_id       
+                    if device_token:
+                        notification_service.send_onesignal_notification(
+                            device_token,
+                            'Ordine confermato con successo',
+                            'Ordine Confermato',
+                            {'type': 'order_confirmed'}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': 'Ordine confermato con successo',
+                            'patner_id': partner_id,
+                            'title': 'Ordine Confermato',
+                            'data': {'type': 'order_confirmed'},
+                            'include_player_ids': device_token,
+                            'filter': 'order'
+                        })
+
+                return {
+                    'status': 'success',
+                    'message': 'Ordine confermato con successo e carrello svuotato.',
+                    'info': 'Order confirmed successfully and cart emptied.',
+                    'order_id': order.id,
+                    'order_state': order.state,
+                    'order_amount_total': order.amount_total,
+                    'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                    'partner_address': shipping_address,
+                    'reward_points_earned': total_points if total_points > 0 else 0
+                }
 
         except Exception as e:
             return {'status': 'error', 'message': 'Si è verificato un errore durante la conferma dell\'ordine.',

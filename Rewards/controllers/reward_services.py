@@ -72,6 +72,10 @@ class RewardAPIs(http.Controller):
             if not order:
                 return {'status': 'error', 'message': 'Ordine non trovato'}, 404
 
+            # check if order state is sale or not draft
+            if order.state == 'draft':
+                return {'status': 'error', 'message': 'Ordine non è in stato di vendita'}, 400
+            
             points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order.order_line)
             if points == 0:
                 return {'status': 'error', 'message': 'Nessun punto da guadagnare'}, 400

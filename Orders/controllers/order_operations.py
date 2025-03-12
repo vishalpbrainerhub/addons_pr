@@ -104,7 +104,7 @@ class Ecommerce_orders(http.Controller):
                 }
 
                 for line in order.sudo().order_line:
-                    
+                    print(line.product_id.id,"------------prodyct id from order line")
                     image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
                     product_data = {
                         'id': line.product_id.id,
@@ -264,8 +264,10 @@ class Ecommerce_orders(http.Controller):
 
             # Update prices based on pricelist before confirming
             for line in order_line:
+                product_product = request.env['product.product'].sudo().browse(line.product_id.id)
+                product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
                 price = ProductPriceController.calculate_price_product(
-                    line.product_id.id, 
+                    product_tmpl.id, 
                     line.product_uom_qty,
                     partner_id
                 )
@@ -444,8 +446,10 @@ class Ecommerce_orders(http.Controller):
 
             # Update prices based on current pricelist
             for line in new_order.order_line:
+                product_product = request.env['product.product'].sudo().browse(line.product_id.id)
+                product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
                 price = ProductPriceController.calculate_price_product(
-                    line.product_id.id,
+                    product_tmpl.id,
                     line.product_uom_qty,
                     partner_id
                 )

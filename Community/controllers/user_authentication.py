@@ -57,7 +57,6 @@ class SocialMediaAuth(http.Controller):
             customer = request.env['res.partner'].sudo().search([
                 ('id', '=', payload['user_id'])
             ])
-            print(customer.id,"--------------------customer")
             
             if customer:
                 return {

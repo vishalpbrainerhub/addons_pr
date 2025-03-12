@@ -30,8 +30,12 @@ class EcommerceCartLine(http.Controller):
 
             cart = []
             for line in cart_lines:
+                
                 if line['product_uom_qty'] > 0:
-                    product = request.env['product.template'].sudo().browse(line['product_id'][0])
+                    
+                    product_product = request.env['product.product'].sudo().browse(line['product_id'][0])
+                    product = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
+                    print(product.id)
                     
                     price = ProductPriceController.calculate_price_product(product.id, line['product_uom_qty'], partner_id)
 

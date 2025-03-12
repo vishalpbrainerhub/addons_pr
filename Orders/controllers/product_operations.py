@@ -175,8 +175,8 @@ class MobileEcommerceApiController(http.Controller):
             print("Count:", count)
             
             # If we're filtering by category, calculate total_items after filtering
-            if category_ids:
-                total_items = len(data)
+        if category_ids:
+            total_items = len(data)
         
         pagination_info = {
             'total_items': total_items,
@@ -331,6 +331,7 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
+            
     @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_product_image(self, product_id, image):
         try:
@@ -362,6 +363,7 @@ class MobileEcommerceApiController(http.Controller):
                 'status': 'error', 
                 'status_code': '500'
             }), content_type='application/json', status=500)
+    
     
     @http.route('/api/products/<int:product_code>', auth='none', type='http', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
     def get_product(self, product_code):
@@ -516,7 +518,6 @@ class MobileEcommerceApiController(http.Controller):
                 'Access-Control-Max-Age': '86400'
             }
             return Response(status=204, headers=headers)
-
         try:
             user_info = SocialMediaAuth.user_auth(self)
             if user_info['status'] == 'error':
@@ -527,8 +528,8 @@ class MobileEcommerceApiController(http.Controller):
                 }, 401
 
             partner_id = user_info['user_id']
-            print("Partner ID:", partner_id)
-            product = request.env['product.template'].sudo().search([('id', '=', product_id)], limit=1)
+            test_product = request.env['product.template'].sudo().search([('id', '=', product_id)], limit=1)
+            product = request.env['product.product'].sudo().search([('product_tmpl_id', '=', test_product.id)], limit=1)
             if not product:
                 return {
                     'status': 'error',

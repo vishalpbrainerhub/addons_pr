@@ -301,7 +301,7 @@ class MobileEcommerceApiController(http.Controller):
                     'discounted_price': final_price*quantity,
                     'min_quantity': product.get('min_quantity'),
                     'category_id': product['category_id'],
-                    'image': f'/web/image/product.product/{pr_id}/image_1920' if product['image_1920'] else None,
+                    'image': f'/web/image/product.template/{pr_id}/image_1920' if product['image_1920'] else None,
                 }
                 product_list.append(product_data)
 

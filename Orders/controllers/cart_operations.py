@@ -47,7 +47,7 @@ class EcommerceCartLine(http.Controller):
                         'name': product.name,
                         'list_price': price*line['product_uom_qty'],
                         'quantity': line['product_uom_qty'],
-                        'image': f'/web/image/product.product/{product.id}/image_1920' if product.image_1920 else None,
+                        'image': f'/web/image/product.template/{product.id}/image_1920' if product.image_1920 else None,
                         'barcode': product.barcode,
                         'active': product.active,
                         'color': getattr(product, 'color', None),

@@ -106,6 +106,8 @@ class Ecommerce_orders(http.Controller):
                 for line in order.sudo().order_line:
                     print(line.product_id.id,"------------prodyct id from order line")
                     image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
+                    
+                    
                     product_data = {
                         'id': line.product_id.id,
                         'name': line.product_id.name,

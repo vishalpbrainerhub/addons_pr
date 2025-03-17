@@ -18,9 +18,13 @@ class OrderExportCron(models.Model):
             os.makedirs(out_dir, exist_ok=True)
             filename = f'{out_dir}/orders_export.csv'
             
+            if not os.access(out_dir, os.W_OK):
+                _logger.error(f"No write permission for directory: {out_dir}")
+                return False
+
             # Debug log to confirm the cron job is running
             _logger.info(f"Starting order export job at {datetime.now()}")
-
+    
             # Directly open file in write mode - this overwrites existing file
             SaleOrder = self.env['sale.order'].sudo()
             

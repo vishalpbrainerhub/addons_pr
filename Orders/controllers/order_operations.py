@@ -120,7 +120,7 @@ class Ecommerce_orders(http.Controller):
                         'base_price': line.price_unit,
                         'discount': line.discount or 0,
                         'order_id': line.order_id.id,
-                        'code': line.product_id.code_,
+                        'code': line.product_id.default_code,
                     }
                     order_data['all_products'].append(product_data)
 

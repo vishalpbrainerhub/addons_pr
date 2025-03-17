@@ -73,7 +73,7 @@ class MobileEcommerceApiController(http.Controller):
 
                     product_info = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score' ,'categ_id', 'code_','image_1920'
+                        'is_published', 'rewards_score' ,'categ_id', 'code_','image_1920','default_code'
                     ])
                     
                     # Skip if no product found
@@ -98,7 +98,7 @@ class MobileEcommerceApiController(http.Controller):
                         'discount': product_info[0].get('discount', 0),
                         'is_published': product_info[0].get('is_published', False),
                         'rewards_score': product_info[0].get('rewards_score', 0),
-                        'code_': product_info[0].get('code_', False),
+                        'code_': product_info[0].get('default_code', False),
                         'min_quantity': [{"min_quantity": item.min_quantity, "price": price}],
                         'category_id': product_info[0]['categ_id'][0],
                         'image_1920': product_info[0]['image_1920'] or ''
@@ -128,7 +128,7 @@ class MobileEcommerceApiController(http.Controller):
                     
                     products_in_category = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score', 'code_', 'categ_id','image_1920'
+                        'is_published', 'rewards_score', 'code_', 'categ_id','image_1920','default_code'
                     ])
                     
                     # Process each product in the category
@@ -153,7 +153,7 @@ class MobileEcommerceApiController(http.Controller):
                             'discount': product_info.get('discount', 0),
                             'is_published': product_info.get('is_published', False),
                             'rewards_score': product_info.get('rewards_score', 0),
-                            'code_': product_info.get('code_', False),
+                            'code_': product_info.get('default_code', False),
                             'min_quantity': 0,
                             'category_id': product_info['categ_id'][0],
                             'image_1920': product_info['image_1920'] or ''
@@ -398,7 +398,7 @@ class MobileEcommerceApiController(http.Controller):
             partner_id = user_info['user_id']
 
             # Retrieve the product data based on code
-            product_data = request.env['product.template'].search_read([('code_', '=', product_code)], [
+            product_data = request.env['product.template'].search_read([('default_code', '=', product_code)], [
                 'id', 'name', 'list_price', 'active', 'barcode', 'color', 'image_1920', 'discount', 
                 'is_published', 'rewards_score', 'default_code', 'code_'
             ])
@@ -474,8 +474,7 @@ class MobileEcommerceApiController(http.Controller):
                     'discount': product["discount"],
                     'is_published': product["is_published"],
                     'rewards_score': product["rewards_score"],
-                    'default_code': product["default_code"],
-                    'code': product["code_"],
+                    'code': product["default_code"],
                     'discounted_price': discounted_price,
                 }
                 

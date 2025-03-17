@@ -54,7 +54,7 @@ class EcommerceCartLine(http.Controller):
                         'base_price': price,
                         'discount': getattr(product, 'discount', 0.0),
                         'order_id': line['order_id'][0],
-                        'code': getattr(product, 'code_', None)
+                        'code': getattr(product, 'default_code', None)
                     }
                     cart.append(test)
                 else:

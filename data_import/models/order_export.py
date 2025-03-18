@@ -92,7 +92,7 @@ class OrderExportCron(models.Model):
                         try:
                             row = base_row.copy()
                             
-                            product_external_id = request.env['product.template'].sudo().search([('id', '=', line.product_id.id)], limit=1).external_id
+                            product_external_id = self.env['product.template'].sudo().search([('id', '=', line.product_id.id)], limit=1).external_id
                             row.update({
                                 # 'order_line/product_id': line.product_id.id if line.product_id else '',
                                 'order_line/product_id': product_external_id,

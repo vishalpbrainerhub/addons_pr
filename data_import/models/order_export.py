@@ -69,10 +69,25 @@ class OrderExportCron(models.Model):
                     # Log each order for debugging
                     _logger.info(f"Processing order ID: {order.id}, state: {order.state}, partner: {order.partner_id.name if order.partner_id else 'None'}")
                     
+                    partner_external_id = ''
+                    if order.partner_id:
+                        # Search for external ID in the external.import model
+                        external_import_record = self.env['external.import'].sudo().search([
+                            ('partner_id', '=', order.partner_id.id)
+                        ], limit=1)
+                        
+                        if external_import_record:
+                            partner_external_id = external_import_record.external_import_id
+                            _logger.info(f"Found external import ID {partner_external_id} for partner {order.partner_id.id}")
+                        else:
+                            partner_external_id = order.partner_id.id
+                            _logger.warning(f"External import ID not found for partner {order.partner_id.id}")
+
+                    # Then update the base_row dictionary to include partner_external_id
                     base_row = {
                         'order_number': order.id,
                         'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else '',
-                        'partner_id': order.partner_id.id if order.partner_id else '',
+                        'partner_id': partner_external_id,  # Use the external ID instead of internal ID
                         'company_id': order.company_id.id if order.company_id else '',
                         'partner_invoice_id': order.partner_invoice_id.id if order.partner_invoice_id else '',
                         'partner_shipping_id': order.partner_shipping_id.id if order.partner_shipping_id else '',

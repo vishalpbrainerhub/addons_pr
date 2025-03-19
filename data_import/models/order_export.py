@@ -84,6 +84,8 @@ class OrderExportCron(models.Model):
                             _logger.warning(f"External import ID not found for partner {order.partner_id.id}")
 
                     # Then update the base_row dictionary to include partner_external_id
+                    pricelist_dict = self.env['product.pricelist'].sudo().search([('id', '=', order.pricelist_id.id)], limit=1)
+                    external_pricelist_id = pricelist_dict.external_id
                     base_row = {
                         'order_number': order.id,
                         'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else '',
@@ -91,9 +93,10 @@ class OrderExportCron(models.Model):
                         'company_id': order.company_id.id if order.company_id else '',
                         'partner_invoice_id': order.partner_invoice_id.id if order.partner_invoice_id else '',
                         'partner_shipping_id': order.partner_shipping_id.id if order.partner_shipping_id else '',
-                        'pricelist_id': order.pricelist_id.id if order.pricelist_id else ''
-                    }
+                        # 'pricelist_id': order.pricelist_id.id if order.pricelist_id else ''
+                        'pricelist_id': external_pricelist_id
 
+                    }
                     # Log order lines
                     _logger.info(f"Order {order.id} has {len(order.order_line)} order lines")
                     
@@ -107,7 +110,6 @@ class OrderExportCron(models.Model):
                         try:
                             row = base_row.copy()
                             
-                            # product_external_id = self.env['product.template'].sudo().search([('id', '=', line.product_id.id)], limit=1).external_id
                             try:
                                 product_template = self.env['product.template'].sudo().search([('id', '=', line.product_id.id)], limit=1)
                                 product_external_id = product_template.external_id if hasattr(product_template, 'external_id') else line.product_id.id

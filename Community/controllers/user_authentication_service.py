@@ -511,3 +511,78 @@ class UsersAuthApi(http.Controller):
                 'message': 'Errore durante il recupero degli stati',
                 'info': str(e)
             }), content_type='application/json', status=500)
+            
+            
+    @http.route('/user/agency', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
+    def agency_details(self):
+        if request.httprequest.method == 'OPTIONS':
+            return self._handle_options()
+
+        user_auth = SocialMediaAuth.user_auth(self)
+        if 'status' in user_auth and user_auth['status'] == 'error':
+            return Response(json.dumps({
+                'status': 'error', 
+                'message': user_auth['message'],
+                'info': 'Authentication failed'
+            }), content_type='application/json', status=401)
+
+        customer_id = user_auth.get('user_id')
+        if not customer_id:
+            return Response(json.dumps({
+                'status': 'error',
+                'message': 'Authentication failed', 
+                'info': 'User ID missing from authentication'
+            }), content_type='application/json', status=400)
+
+        customer = request.env['res.partner'].sudo().search([
+            ('id', '=', customer_id)
+        ], limit=1)
+
+        if not customer:
+            return Response(json.dumps({
+                'status': 'error',
+                'message': 'Utente non trovato',
+                'info': 'User not found'
+            }), content_type='application/json', status=404)
+            
+        try:
+            customer_info = customer.read(['name', 'email', 'phone', 'mobile', 'vat', 
+                                        'company_id', 'image_1920'])[0]
+            
+            customer_data = {}
+            customer_data['name'] = customer_info.get('name')
+            customer_data['email'] = customer_info.get('email')
+            customer_data['phone'] = customer_info.get('phone')
+            customer_data['vat'] = customer_info.get('vat')
+            
+            
+            company_name = request.env['res.company'].sudo().search([('id', '=', customer_info.get('company_id')[0])], limit=1)
+            customer_data['company_name'] = company_name.name
+            tax_code = request.env['account.tax'].sudo().search([('company_id', '=', customer_info.get('company_id')[0])], limit=1)
+            customer_data['tax_code'] = tax_code.name
+            pa_index = request.env['account.fiscal.position'].sudo().search([('company_id', '=', customer_info.get('company_id')[0])], limit=1)
+            customer_data['pa_index'] = pa_index.name if pa_index else False
+            print('customer_data', customer_data)
+            
+            
+            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', customer_id), ('default', '=', True)], limit=1)
+            if not customer_address:
+                customer_data['address'] = ''   
+            else:
+                customer_address_data = customer_address.read(['address', 'continued_address', 'city', 'postal_code', 'village', 'default', 'state_id', 'country_id'])
+                customer_data['address'] = f'{customer_address_data[0].get("address")}, {customer_address_data[0].get("continued_address")}, {customer_address_data[0].get("city")}, {customer_address_data[0].get("postal_code")}, {customer_address_data[0].get("village")}'
+            
+
+            return Response(json.dumps({
+                'status': 'success',
+                'agency': customer_data
+            }), content_type='application/json')
+
+        except Exception as e:
+            _logger.error('Error retrieving customer details: %s', str(e))
+            return Response(json.dumps({
+                'status': 'error',
+                'message': 'Errore durante il recupero dei dettagli dell\'utente',
+                'info': str(e)
+            }), content_type='application/json', status=500)
+            

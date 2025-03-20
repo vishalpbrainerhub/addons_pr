@@ -137,6 +137,7 @@ class Users(http.Controller):
                 "status": "success",
                 "message": "Accesso eseguito con successo",
                 "user": {
+                    'id': customer.id,
                     'name': customer.name,
                     'email': customer.email,
                     'phone': customer.phone,

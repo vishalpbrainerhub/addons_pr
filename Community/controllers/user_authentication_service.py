@@ -546,31 +546,35 @@ class UsersAuthApi(http.Controller):
             }), content_type='application/json', status=404)
             
         try:
-            customer_info = customer.read(['name', 'email', 'phone', 'mobile', 'vat', 
-                                        'company_id', 'image_1920'])[0]
-            
+            company_id = customer.company_id.id
+            if not company_id:
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Agenzia non trovata',
+                    'info': 'Agency not found'
+                }), content_type='application/json', status=404)
+                
+            company = request.env['res.company'].sudo().search([
+                ('id', '=', company_id)
+            ], limit=1)
             customer_data = {}
-            customer_data['name'] = customer_info.get('name')
-            customer_data['email'] = customer_info.get('email')
-            customer_data['phone'] = customer_info.get('phone')
-            customer_data['vat'] = customer_info.get('vat')
+            if not company:
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Agenzia non trovata',
+                    'info': 'Agency not found'
+                }), content_type='application/json', status=404)
+                
             
-            
-            company_name = request.env['res.company'].sudo().search([('id', '=', customer_info.get('company_id')[0])], limit=1)
-            customer_data['company_name'] = company_name.name
-            tax_code = request.env['account.tax'].sudo().search([('company_id', '=', customer_info.get('company_id')[0])], limit=1)
-            customer_data['tax_code'] = tax_code.name
-            pa_index = request.env['account.fiscal.position'].sudo().search([('company_id', '=', customer_info.get('company_id')[0])], limit=1)
-            customer_data['pa_index'] = pa_index.name if pa_index else False
-            print('customer_data', customer_data)
-            
-            
-            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', customer_id), ('default', '=', True)], limit=1)
-            if not customer_address:
-                customer_data['address'] = ''   
-            else:
-                customer_address_data = customer_address.read(['address', 'continued_address', 'city', 'postal_code', 'village', 'default', 'state_id', 'country_id'])
-                customer_data['address'] = f'{customer_address_data[0].get("address")}, {customer_address_data[0].get("continued_address")}, {customer_address_data[0].get("city")}, {customer_address_data[0].get("postal_code")}, {customer_address_data[0].get("village")}'
+            company_data = company.read(['name', 'email', 'phone', 'website', 'street', 'city', 'zip', 'country_id', 'state_id','vat'])[0]
+            customer_data.name = company_data['name'] or ''
+            customer_data.email = company_data['email'] or ''
+            customer_data.phone = company_data['phone'] or ''
+            customer_data.vat = company_data['vat'] or ''
+            customer_data.website = company_data['website'] or ''
+            customer_data.adress = f'{company_data["street"]} {company_data["city"]} {company_data["zip"]}, {company_data["state_id"][1]}, {company_data["country_id"][1]}' or ''
+            customer_data.tax_code = 'Vat 22%' 
+            customer_data.pa_index = 'RE-125986'
             
 
             return Response(json.dumps({

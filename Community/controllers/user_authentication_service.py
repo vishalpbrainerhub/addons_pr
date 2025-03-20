@@ -567,14 +567,14 @@ class UsersAuthApi(http.Controller):
                 
             
             company_data = company.read(['name', 'email', 'phone', 'website', 'street', 'city', 'zip', 'country_id', 'state_id','vat'])[0]
-            customer_data.name = company_data['name'] or ''
-            customer_data.email = company_data['email'] or ''
-            customer_data.phone = company_data['phone'] or ''
-            customer_data.vat = company_data['vat'] or ''
-            customer_data.website = company_data['website'] or ''
-            customer_data.adress = f'{company_data["street"]} {company_data["city"]} {company_data["zip"]}, {company_data["state_id"][1]}, {company_data["country_id"][1]}' or ''
-            customer_data.tax_code = 'Vat 22%' 
-            customer_data.pa_index = 'RE-125986'
+            customer_data['name'] = company_data['name'] or ''
+            customer_data['email'] = company_data['email'] or ''
+            customer_data['phone'] = company_data['phone'] or ''
+            customer_data['vat'] = company_data['vat'] or ''
+            customer_data['website'] = company_data['website'] or ''
+            customer_data['address'] = f'{company_data["street"]} {company_data["city"]} {company_data["zip"]}, {company_data["state_id"][1]}, {company_data["country_id"][1]}' or ''
+            customer_data['tax_code'] = 'Vat 22%' 
+            customer_data['pa_index'] = 'RE-125986'
             
 
             return Response(json.dumps({

@@ -141,8 +141,7 @@ class MobileEcommerceApiController(http.Controller):
                         elif item.compute_price == 'formula':
                             price = product_info['list_price'] * (1 - (item.price_discount / 100))
                             
-                            
-                            
+                        # FIX: Initialize min_quantity as a list instead of an integer
                         product_dict = {
                             'name': product_info['name'],
                             'list_price': price,
@@ -154,7 +153,7 @@ class MobileEcommerceApiController(http.Controller):
                             'is_published': product_info.get('is_published', False),
                             'rewards_score': product_info.get('rewards_score', 0),
                             'code_': product_info.get('default_code', False),
-                            'min_quantity': 0,
+                            'min_quantity': [],  # Changed from 0 to an empty list
                             'category_id': product_info['categ_id'][0],
                             'image_1920': product_info['image_1920'] or ''
                         }
@@ -187,7 +186,7 @@ class MobileEcommerceApiController(http.Controller):
             'has_previous': page > 1
         }
         return data, pagination_info
-    
+
     @http.route('/api/products', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_products(self):
         if request.httprequest.method == 'OPTIONS':
@@ -265,25 +264,8 @@ class MobileEcommerceApiController(http.Controller):
                 if product['discount']:
                     final_price = final_price * (1 - (product['discount'] / 100))
                 
-                
-                # image = product['image_1920'] or None
-                # product_image_name = f'product_{random.randint(1, 1000)}_image.png'
                 pr_id = product['id']
-                # image_path = f"/images/products/{pr_id}/{product_image_name}"
                 
-                # if image:
-                #     save_dir = os.path.join('/mnt/data/images', 'products', str(pr_id))
-                #     os.makedirs(save_dir, exist_ok=True)
-                    
-                #     # Clean existing files
-                #     for file in os.listdir(save_dir):
-                #         os.remove(os.path.join(save_dir, file))
-                        
-                #     # Save new image
-                #     with open(os.path.join(save_dir, product_image_name), 'wb') as f:
-                #         f.write(base64.b64decode(image))
-                
-
                 product_data = {
                     'name': product['name'],
                     'list_price': final_price,
@@ -331,7 +313,7 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
-            
+              
     @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_product_image(self, product_id, image):
         try:

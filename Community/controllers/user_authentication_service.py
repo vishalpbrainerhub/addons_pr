@@ -513,6 +513,84 @@ class UsersAuthApi(http.Controller):
             }), content_type='application/json', status=500)
             
             
+    # @http.route('/user/agency', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
+    # def agency_details(self):
+    #     if request.httprequest.method == 'OPTIONS':
+    #         return self._handle_options()
+
+    #     user_auth = SocialMediaAuth.user_auth(self)
+    #     if 'status' in user_auth and user_auth['status'] == 'error':
+    #         return Response(json.dumps({
+    #             'status': 'error', 
+    #             'message': user_auth['message'],
+    #             'info': 'Authentication failed'
+    #         }), content_type='application/json', status=401)
+
+    #     customer_id = user_auth.get('user_id')
+    #     if not customer_id:
+    #         return Response(json.dumps({
+    #             'status': 'error',
+    #             'message': 'Authentication failed', 
+    #             'info': 'User ID missing from authentication'
+    #         }), content_type='application/json', status=400)
+
+    #     customer = request.env['res.partner'].sudo().search([
+    #         ('id', '=', customer_id)
+    #     ], limit=1)
+
+    #     if not customer:
+    #         return Response(json.dumps({
+    #             'status': 'error',
+    #             'message': 'Utente non trovato',
+    #             'info': 'User not found'
+    #         }), content_type='application/json', status=404)
+            
+    #     try:
+    #         company_id = customer.company_id.id
+    #         if not company_id:
+    #             return Response(json.dumps({
+    #                 'status': 'error',
+    #                 'message': 'Agenzia non trovata',
+    #                 'info': 'Agency not found'
+    #             }), content_type='application/json', status=404)
+                
+    #         company = request.env['res.company'].sudo().search([
+    #             ('id', '=', company_id)
+    #         ], limit=1)
+    #         customer_data = {}
+    #         if not company:
+    #             return Response(json.dumps({
+    #                 'status': 'error',
+    #                 'message': 'Agenzia non trovata',
+    #                 'info': 'Agency not found'
+    #             }), content_type='application/json', status=404)
+                
+            
+    #         company_data = company.read(['name', 'email', 'phone', 'website', 'street', 'city', 'zip', 'country_id', 'state_id','vat'])[0]
+    #         customer_data['name'] = company_data['name'] or ''
+    #         customer_data['email'] = company_data['email'] or ''
+    #         customer_data['phone'] = company_data['phone'] or ''
+    #         customer_data['vat'] = company_data['vat'] or ''
+    #         customer_data['website'] = company_data['website'] or ''
+    #         customer_data['address'] = f'{company_data["street"]} {company_data["city"]} {company_data["zip"]}, {company_data["state_id"][1]}, {company_data["country_id"][1]}' or ''
+    #         customer_data['tax_code'] = 'Vat 22%' 
+    #         customer_data['pa_index'] = 'RE-125986'
+            
+
+    #         return Response(json.dumps({
+    #             'status': 'success',
+    #             'agency': customer_data
+    #         }), content_type='application/json')
+
+    #     except Exception as e:
+    #         _logger.error('Error retrieving customer details: %s', str(e))
+    #         return Response(json.dumps({
+    #             'status': 'error',
+    #             'message': 'Errore durante il recupero dei dettagli dell\'utente',
+    #             'info': str(e)
+    #         }), content_type='application/json', status=500)
+            
+
     @http.route('/user/agency', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def agency_details(self):
         if request.httprequest.method == 'OPTIONS':
@@ -566,13 +644,22 @@ class UsersAuthApi(http.Controller):
                 }), content_type='application/json', status=404)
                 
             
-            company_data = company.read(['name', 'email', 'phone', 'website', 'street', 'city', 'zip', 'country_id', 'state_id','vat'])[0]
+            company_data = company.read(['name'])[0]
             customer_data['name'] = company_data['name'] or ''
-            customer_data['email'] = company_data['email'] or ''
-            customer_data['phone'] = company_data['phone'] or ''
-            customer_data['vat'] = company_data['vat'] or ''
-            customer_data['website'] = company_data['website'] or ''
-            customer_data['address'] = f'{company_data["street"]} {company_data["city"]} {company_data["zip"]}, {company_data["state_id"][1]}, {company_data["country_id"][1]}' or ''
+            
+            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', customer_id), ('default', '=', True)])
+
+            
+            customer_data['address'] = f'{customer_address.address} {customer_address.city} {customer_address.postal_code}, {customer_address.state_id.name}, {customer_address.country_id.name}' or ''
+            
+            customer_info = request.env['res.partner'].sudo().search([
+                ('id', '=', customer_id)
+            ], limit=1)
+            customer_data['email'] = customer_info.email or ''
+            customer_data['username'] = customer_info.name or ''
+            customer_data['phone'] = customer_info.phone or ''
+            customer_data['vat'] = customer_info.vat or ''
+            customer_data['website'] = customer_info.website or ''
             customer_data['tax_code'] = 'Vat 22%' 
             customer_data['pa_index'] = 'RE-125986'
             
@@ -589,4 +676,3 @@ class UsersAuthApi(http.Controller):
                 'message': 'Errore durante il recupero dei dettagli dell\'utente',
                 'info': str(e)
             }), content_type='application/json', status=500)
-            

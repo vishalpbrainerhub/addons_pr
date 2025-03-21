@@ -27,11 +27,9 @@ venv/
 **In
 
 zz.txt
-.gitignore
+.gitignore*
 
-
-
-
+*order_status.txt
 
 Host: your-server-ip
 Username: ftpuser_primapaint

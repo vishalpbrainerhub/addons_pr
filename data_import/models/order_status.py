@@ -38,6 +38,18 @@ class DataImporter(models.TransientModel):
                     if order_status == record['state']:
                         _logger.info(f"Order {order.name} already has status {record['state']}")
                         continue
+                    
+                    message = ""
+                    if record['state'] == 'sale':
+                        message = "Il tuo ordine è stato spedito!"
+                    elif record['state'] == 'draft':
+                        message = "Il tuo ordine è in fase elaborazione."
+                    elif record['state'] == 'cancel':
+                        message = "Il tuo ordine è stato cancellato."
+                    elif record['state'] == 'invoice':
+                        message = "La fattura del tuo ordine è stata confermata."
+
+                        
                     order.write({'state': record['state']})
                     new_status = record['state']
                     filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
@@ -48,14 +60,14 @@ class DataImporter(models.TransientModel):
                             # Send notification about order status change
                             notification_service.send_onesignal_notification(
                                 device_token,
-                                f'Stato ordine aggiornato a: {new_status}',
+                                message,
                                 'Aggiornamento Ordine',
                                 {'type': 'order_status_change', 'new_status': new_status}
                             )
                             
                             # Store notification in database
                             request.env['notification.storage'].sudo().create({
-                                'message': f'Stato ordine aggiornato a: {new_status}',
+                                'message': message,
                                 'patner_id': partner_id,  # Note: There's a typo here - "patner_id" should be "partner_id"
                                 'title': 'Aggiornamento Ordine',
                                 'data': {'type': 'order_status_change', 'new_status': new_status},

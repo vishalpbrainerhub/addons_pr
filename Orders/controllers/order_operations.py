@@ -356,24 +356,24 @@ class Ecommerce_orders(http.Controller):
                     if device_token:
                         notification_service.send_onesignal_notification(
                             device_token,
-                            'Ordine confermato con successo',
-                            'Ordine Confermato',
-                            {'type': 'order_confirmed'}
+                            'Ordine inserito con successo',
+                            'Ordine inserito',
+                            {'type': 'order_placed'}
                         )
                         
                         request.env['notification.storage'].sudo().create({
-                            'message': 'Ordine confermato con successo',
+                            'message': 'Ordine inserito con successo',
                             'patner_id': partner_id,
-                            'title': 'Ordine Confermato',
-                            'data': {'type': 'order_confirmed'},
+                            'title': 'Ordine inserito',
+                            'data': {'type': 'order_placed'},
                             'include_player_ids': device_token,
                             'filter': 'order'
                         })
 
                 return {
                     'status': 'success',
-                    'message': 'Ordine confermato con successo e carrello svuotato.',
-                    'info': 'Order confirmed successfully and cart emptied.',
+                    'message': 'Ordine inserito con successo e carrello svuotato.',
+                    'info': 'Order placed successfully and cart emptied.',
                     'order_id': order.id,
                     'order_state': order.state,
                     'order_amount_total': order.amount_total,

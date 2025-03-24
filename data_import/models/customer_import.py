@@ -3,6 +3,7 @@ from odoo import models, fields, api
 import csv
 import logging
 import ast
+import random
 from contextlib import closing
 import os
 
@@ -15,15 +16,52 @@ class Partner_External_import_id(models.Model):
     partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     external_import_id = fields.Integer(string='External Import ID', required=True)
     
-    
-    
-
 class DataImporter(models.TransientModel):
     # _name = 'data.importer'
     _inherit = 'data.importer'
     _description = 'Data Import Wizard'
+    
+    def _send_welcome_email(self, partner, email):
+        """Send welcome email with password"""
+        password = ''.join(random.choices('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', k=8))
+        password_record = self.env['customer.password'].sudo().create({
+            'partner_id': partner.id
+        })
+        password_record.set_password(password)
         
-  
+        template = self.env['mail.template'].sudo().create({
+                    'name': 'Credenziali Cliente',
+                    'email_from': 'admin@primapaint.com',
+                    'email_to': email,
+                    'subject': 'Benvenuto a PrimaPaint - Le tue Credenziali di Accesso',
+                    'body_html': f'''
+                        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                            
+                            <h1 style="color: #333333; text-align: center; margin-bottom: 20px;">Benvenuto in <span style="color: #007bff;">PrimaPaint</span>!</h1>
+                            
+                            <p style="color: #555555; font-size: 16px; line-height: 1.6;">Gentile <strong>{partner.name}</strong>,</p>
+                            
+                            <p style="color: #555555; font-size: 16px; line-height: 1.6;">Grazie per esserti registrato. Ecco le tue credenziali di accesso:</p>
+                            
+                            <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0; margin: 20px 0;">
+                                <p style="margin: 10px 0; color: #333333;"><strong>Email:</strong> {partner.email}</p>
+                                <p style="margin: 10px 0; color: #333333;"><strong>Password:</strong> {password}</p>
+                            </div>
+                            
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="#" style="display: inline-block; background-color: #28a745; color: #ffffff; text-decoration: none; padding: 12px 40px; border-radius: 5px; font-size: 16px; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">Scarica la nostra App</a>
+                            </div>
+                            
+                            <p style="color: #777777; font-size: 14px; text-align: center; margin-top: 30px;">
+                                Per qualsiasi domanda, non esitare a contattarci.<br>
+                                <strong>Il team di PrimaPaint</strong>
+                            </p>
+                        </div>
+                    ''',
+                    'model_id': self.env['ir.model']._get('res.partner').id
+                })
+        template.send_mail(partner.id, force_send=True)
+        
     def import_cutomers(self):
         try:
             _logger.info("Starting customer import process...")
@@ -53,14 +91,22 @@ class DataImporter(models.TransientModel):
                                 'country_id': 110,
                                 'vat': row['vat'],
                                 # 'l10n_it_codice_fiscale': row['l10n_it_codice_fiscale'],
-                                'property_product_pricelist': pricelist.id
-                                
+                                'property_product_pricelist': pricelist.id,
+                                'company_id': 1,
                             })
                             
                             self.env['external.import'].create({
                                 'external_import_id': customer_id,
                                 'partner_id': customer.id
                             })
+                            
+                            # Send welcome email after customer creation
+                            if customer.email:
+                                try:
+                                    self._send_welcome_email(customer, customer.email)
+                                    _logger.info(f"Welcome email sent to {customer.email}")
+                                except Exception as email_error:
+                                    _logger.error(f"Error sending welcome email to {customer.email}: {email_error}")
                             
                             _logger.info(f"Created customer {customer.name} (ID: {customer_id})")
                     
@@ -77,4 +123,3 @@ class DataImporter(models.TransientModel):
     def import_all_data(self):
         _logger.info("Starting customer import process...")
         return self.import_cutomers()
-        

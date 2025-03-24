@@ -111,10 +111,11 @@ class OrderExportCron(models.Model):
                             row = base_row.copy()
                             
                             try:
-                                product_template = self.env['product.template'].sudo().search([('id', '=', line.product_id.id)], limit=1)
+                                
+                                product_product = self.env['product.product'].sudo().search([('id', '=', line.product_id.id)], limit=1)
+                                product_template = self.env['product.template'].sudo().search([('id', '=', product_product.product_tmpl_id.id)], limit=1)
                                 product_external_id = product_template.external_id if hasattr(product_template, 'external_id') else line.product_id.id
                             except Exception as e:
-                                _logger.warning(f"Could not retrieve external_id for product {line.product_id.id}: {str(e)}")
                                 product_external_id = line.product_id.id
                                 
                             row.update({

@@ -35,7 +35,7 @@ class DataImporter(models.TransientModel):
                     partner_id = order.partner_id.id
                     
                     order_status = order.state
-                    if order_status == record['state']:
+                    if order_status == record['state'] and record['state'] != 'sale':
                         _logger.info(f"Order {order.name} already has status {record['state']}")
                         continue
                     

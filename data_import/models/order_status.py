@@ -50,7 +50,6 @@ class DataImporter(models.TransientModel):
                         message = "La fattura del tuo ordine è stata confermata."
 
                         
-                    order.write({'state': record['state']})
                     new_status = record['state']
                     filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
                     if filter_notification.order:

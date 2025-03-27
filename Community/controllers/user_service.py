@@ -132,7 +132,8 @@ class Users(http.Controller):
                 except Exception as notification_error:
                     _logger.error('Notification error during login: %s', str(notification_error))
                     # Continue with login even if notification fails
-                    
+            
+            pricelist_name = request.env['res.partner'].sudo().browse(customer.id).property_product_pricelist.name
             return {
                 "status": "success",
                 "message": "Accesso eseguito con successo",
@@ -142,6 +143,7 @@ class Users(http.Controller):
                     'email': customer.email,
                     'phone': customer.phone,
                     'company_id': customer.company_id.id if customer.company_id else False,
+                     'pricelist_name': pricelist_name or '',
                     'lang': customer.lang or 'en_US'
                 },
                 "token": token if isinstance(token, str) else token.decode('utf-8')

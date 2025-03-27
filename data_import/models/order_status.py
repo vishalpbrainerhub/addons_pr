@@ -35,9 +35,15 @@ class DataImporter(models.TransientModel):
                     partner_id = order.partner_id.id
                     
                     order_status = order.state
-                    if order_status == record['state'] and order.sale_notification:
-                        _logger.info(f"Order {order.name} already has status {record['state']}")
-                        continue
+                    if order_status == record['state']:
+                        # For 'sale' status, also check if notification was already sent
+                        if record['state'] == 'sale' and order.sale_notification:
+                            _logger.info(f"Order {order.name} already has status {record['state']} and notification was sent")
+                            continue
+                        # For other statuses, we just check if status hasn't changed
+                        elif record['state'] != 'sale':
+                            _logger.info(f"Order {order.name} already has status {record['state']}")
+                            continue
                     
                     # message = ""
                     # if record['state'] == 'sale':

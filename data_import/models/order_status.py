@@ -47,15 +47,20 @@ class DataImporter(models.TransientModel):
                     
                     message = ""
                     if record['state'] == 'sale':
-                        message = f"Il tuo ordine {order.name} è stato spedito!"
+                        message = f"Il tuo ordine {order.name} è stato confermato!"
                         # Mark that notification for sale status was sent
                         order.write({'sale_notification': True})
                     elif record['state'] == 'draft':
-                        message = f"Il tuo ordine {order.name} è in fase elaborazione."
+                        message = f"Il tuo ordine {order.name} è in fase di preventivo."
+                    elif record['state'] == 'sent':
+                        message = f"Il preventivo per il tuo ordine {order.name} è stato inviato."
+                    elif record['state'] == 'done':
+                        message = f"Il tuo ordine {order.name} è stato completato e bloccato."
                     elif record['state'] == 'cancel':
                         message = f"Il tuo ordine {order.name} è stato cancellato."
-                    elif record['state'] == 'invoice':
-                        message = f"La fattura del tuo ordine {order.name} è stata confermata."
+                    else:
+                        _logger.warning(f"Unknown state {record['state']} for order {order.name}")
+                        continue
                         
                         
                     # message = ""

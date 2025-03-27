@@ -149,7 +149,7 @@ class Ecommerce_orders(http.Controller):
             partner_id = user['user_id']
             orders = request.env['sale.order'].sudo().search([
                 ('partner_id', '=', partner_id),
-                ('state', 'in', ['sent', 'sale', 'done'])
+                # ('state', 'in', ['sent', 'sale', 'done'])
             ])
 
             response_data = []

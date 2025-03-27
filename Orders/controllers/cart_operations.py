@@ -35,12 +35,16 @@ class EcommerceCartLine(http.Controller):
                     
                     product_product = request.env['product.product'].sudo().browse(line['product_id'][0])
                     product = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                    print(product.id)
                     
-                    price = ProductPriceController.calculate_price_product(product.id, line['product_uom_qty'], partner_id)
+                    # Get minimum quantity price using the new function
+                    min_quantity_price_info = ProductPriceController.get_min_quantity_price(product.id, partner_id)
+                    
+                    # Set the price to the min quantity price
+                    price = min_quantity_price_info['price']
 
                     product_discount = getattr(product, 'discount', 0.0)
                     price = price - (price * product_discount / 100)
+                    
                     test = {
                         'id': line['id'],
                         'product_id': product.id,
@@ -54,7 +58,10 @@ class EcommerceCartLine(http.Controller):
                         'base_price': price,
                         'discount': getattr(product, 'discount', 0.0),
                         'order_id': line['order_id'][0],
-                        'code': getattr(product, 'default_code', None)
+                        'code': getattr(product, 'default_code', None),
+                        'min_quantity': min_quantity_price_info['min_quantity'],
+                        'min_quantity_price': min_quantity_price_info['price'],
+                        'min_quantity_rules': min_quantity_price_info['price_rules']
                     }
                     cart.append(test)
                 else:
@@ -75,7 +82,7 @@ class EcommerceCartLine(http.Controller):
                 'message': 'Si è verificato un errore nel recupero dei dettagli del carrello.',
                 'info': str(e)
             }), content_type='application/json', status=500, headers={'Access-Control-Allow-Origin': '*'})
-        
+    
     @http.route('/api/cart_line', auth='public', type='json', methods=['POST'], csrf=False, cors='*')
     def create_cart_line(self):
         """

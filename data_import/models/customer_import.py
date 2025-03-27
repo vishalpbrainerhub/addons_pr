@@ -79,8 +79,11 @@ class DataImporter(models.TransientModel):
                         if not self.env['external.import'].search_count([('external_import_id', '=', customer_id)]):
                             pricelist = self.env['product.pricelist'].search([('external_id', '=', category_id)], limit=1)
                             if not pricelist:
-                                _logger.error(f"Pricelist not found for category_id: {category_id}")
-                                continue
+                                _logger.warning(f"Pricelist not found for category_id: {category_id}, using default pricelist")
+                                pricelist = self.env['product.pricelist'].search([('id', '=', 1)], limit=1)  # Assuming ID 1 is the default pricelist
+                                if not pricelist:
+                                    _logger.error(f"No default pricelist found, skipping customer")
+                                    continue
                                 
                             customer = self.env['res.partner'].create({
                                 'name': row['name'],
@@ -101,14 +104,14 @@ class DataImporter(models.TransientModel):
                             })
                             
                             # Send welcome email after customer creation
-                            if customer.email:
-                                try:
-                                    self._send_welcome_email(customer, customer.email)
-                                    _logger.info(f"Welcome email sent to {customer.email}")
-                                except Exception as email_error:
-                                    _logger.error(f"Error sending welcome email to {customer.email}: {email_error}")
+                            # if customer.email:
+                            #     try:
+                            #         self._send_welcome_email(customer, customer.email)
+                            #         _logger.info(f"Welcome email sent to {customer.email}")
+                            #     except Exception as email_error:
+                            #         _logger.error(f"Error sending welcome email to {customer.email}: {email_error}")
                             
-                            _logger.info(f"Created customer {customer.name} (ID: {customer_id})")
+                            # _logger.info(f"Created customer {customer.name} (ID: {customer_id})")
                     
                     except Exception as e:
                         _logger.error(f"Error processing customer {row.get('name', 'Unknown')}: {e}")

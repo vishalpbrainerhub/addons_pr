@@ -70,7 +70,13 @@ class DataImporter(models.TransientModel):
                             'date_start': row['item_ids/date_start'] if row['item_ids/date_start'] else False,
                             'date_end': row['item_ids/date_end'] if row['item_ids/date_end'] else False,
                             'base_pricelist_id': self.env['product.pricelist'].search([('external_id', '=', row['item_ids/base_pricelist_id'])], limit=1).id if row['item_ids/base_pricelist_id'] else False,
-                            'price_discount': float(row['item_ids/price_discount']) if row['item_ids/price_discount'] else 0.0
+                            'price_discount': float(row['item_ids/price_discount']) if row['item_ids/price_discount'] else 0.0,
+                            # Add missing fields
+                            'fixed_price': float(row['item_ids/fixed_price']) if row.get('item_ids/fixed_price') else 0.0,
+                            'price_surcharge': float(row['item_ids/price_surcharge']) if row.get('item_ids/price_surcharge') else 0.0,
+                            'price_round': float(row['item_ids/price_round']) if row.get('item_ids/price_round') else 0.0,
+                            'price_min_margin': float(row['item_ids/price_min_margin']) if row.get('item_ids/price_min_margin') else 0.0,
+                            'price_max_margin': float(row['item_ids/price_max_margin']) if row.get('item_ids/price_max_margin') else 0.0,
                         }
 
                         # Handle category-based rules
@@ -108,8 +114,11 @@ class DataImporter(models.TransientModel):
                                     'product_tmpl_id': product_tmpl.id
                                 })
                         else:
-                            _logger.error("Neither category nor product specified for pricelist item")
-                            continue
+                            # Global rule (applies to all products)
+                            item_vals.update({
+                                'applied_on': '3_global'
+                            })
+                            _logger.info("Creating global pricing rule")
 
                         # Create the pricelist item
                         _logger.info(f"Creating pricelist item with values: {item_vals}")

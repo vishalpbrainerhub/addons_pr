@@ -1,3 +1,4 @@
+    
 from odoo import http, fields
 from odoo.http import request, Response
 import json
@@ -7,7 +8,9 @@ import math
 from .helper_functions import ProductPriceController
 import os
 import base64
+import logging
 
+_logger = logging.getLogger(__name__)
 
 class MobileEcommerceApiController(http.Controller):    
     
@@ -21,64 +24,74 @@ class MobileEcommerceApiController(http.Controller):
             page_size: Number of items per page (default: 20)
             category_ids: List of category IDs to filter by (optional)
         """
-        cr = request.env.cr
         env = request.env
-        
-        cr.execute("""
-            SELECT 
-                rp.id as partner_id,
-                rp.name as partner_name,
-                pp.id as pricelist_id,
-                pp.name as pricelist_name
-            FROM res_partner rp
-            LEFT JOIN ir_property ip ON ip.res_id = CONCAT('res.partner,', rp.id)
-            LEFT JOIN product_pricelist pp ON pp.id = CAST(SUBSTRING(ip.value_reference FROM 'product.pricelist,(.*)') AS INTEGER)
-            WHERE ip.name = 'property_product_pricelist'
-            AND rp.id = %s
-        """, (partner_id,))
-        
-        result = cr.fetchone()
         data = []
         total_items = 0
         
-        if result and result[2]:  # if pricelist_id exists
-            pricelist_id = result[2]
-            pricelist = env['product.pricelist'].sudo().browse(pricelist_id)
+        # Get partner's pricelist using ORM
+        partner = env['res.partner'].sudo().browse(partner_id)
+        if not partner:
+            return data, self._get_pagination_info(0, page, page_size)
             
-            # Get all pricelist items first to calculate total
-            all_pricelist_items = pricelist.item_ids
-            
-            # If we're filtering by category, don't apply pagination
+        pricelist = partner.property_product_pricelist
+        if not pricelist:
+            return data, self._get_pagination_info(0, page, page_size)
+        
+        # Define base domain for product search
+        base_domain = []
+        if category_ids:
+            base_domain.append(('categ_id', 'in', category_ids))
+        
+        # First, collect all products from pricelist items
+        products_to_fetch = set()
+        category_products = {}
+        
+        # Collect products directly referenced in pricelist items
+        for item in pricelist.item_ids:
+            if item.product_tmpl_id.id:
+                products_to_fetch.add(item.product_tmpl_id.id)
+            elif item.categ_id.id:
+                # Store category ID to fetch products later
+                if item.categ_id.id not in category_products:
+                    category_products[item.categ_id.id] = {
+                        'compute_price': item.compute_price,
+                        'fixed_price': item.fixed_price if hasattr(item, 'fixed_price') else 0,
+                        'percent_price': item.percent_price if hasattr(item, 'percent_price') else 0,
+                        'price_discount': item.price_discount if hasattr(item, 'price_discount') else 0,
+                        'min_quantity': item.min_quantity if hasattr(item, 'min_quantity') else 0
+                    }
+        
+        # Fetch products from categories
+        for categ_id, pricing_info in category_products.items():
+            domain = [('categ_id', '=', categ_id)]
             if category_ids:
-                pricelist_items = all_pricelist_items
-            else:
-                total_items = len(all_pricelist_items)
-                # Calculate pagination
-                start_idx = (page - 1) * page_size
-                end_idx = start_idx + page_size
-                # Get paginated items
-                pricelist_items = all_pricelist_items[start_idx:end_idx]
+                if categ_id not in category_ids:
+                    continue
+                domain = [('categ_id', 'in', category_ids)]
             
-            count = 0
-            for item in pricelist_items:
-                count += 1
-                if item.product_tmpl_id.id:
-                    domain = [
-                        ('id', '=', item.product_tmpl_id.id)
-                    ]
-                    
-                    # Add category filter if specified
-                    if category_ids:
-                        domain.append(('categ_id', 'in', category_ids))
-
-                    product_info = env['product.template'].sudo().search_read(domain, [
-                        'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score' ,'categ_id', 'code_','image_1920','default_code','external_id'
-                    ])
-                    
-                    # Skip if no product found
-                    if not product_info:
-                        continue
+            products_in_category = env['product.template'].sudo().search(domain)
+            for product in products_in_category:
+                products_to_fetch.add(product.id)
+        
+        # Now fetch all products at once with all required fields
+        if products_to_fetch:
+            domain = [('id', 'in', list(products_to_fetch))]
+            if category_ids:
+                domain.append(('categ_id', 'in', category_ids))
+            
+            all_products = env['product.template'].sudo().search_read(domain, [
+                'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
+                'is_published', 'rewards_score', 'categ_id', 'default_code', 'image_1920', 'external_id'
+            ])
+            
+            # Convert to dictionary for quick lookup
+            products_dict = {product['id']: product for product in all_products}
+            
+            # Process all pricelist items
+            for item in pricelist.item_ids:
+                # Product-specific price rule
+                if item.product_tmpl_id.id and item.product_tmpl_id.id in products_dict:
+                    product_info = products_dict[item.product_tmpl_id.id]
                     
                     price = 0
                     if item.compute_price == 'percentage':
@@ -86,100 +99,93 @@ class MobileEcommerceApiController(http.Controller):
                     elif item.compute_price == 'fixed':
                         price = item.fixed_price
                     elif item.compute_price == 'formula':
-                        price = product_info[0]['list_price'] * (1 - (item.price_discount / 100))
-                        
-                    product_dict = {
-                        'name': product_info[0]['name'],
-                        'list_price': price,
-                        'active': product_info[0]['active'],
-                        'barcode': product_info[0]['barcode'],
-                        'color': product_info[0]['color'],
-                        'id': item.product_tmpl_id.id,
-                        'discount': product_info[0].get('discount', 0),
-                        'is_published': product_info[0].get('is_published', False),
-                        'rewards_score': product_info[0].get('rewards_score', 0),
-                        'code_': product_info[0].get('default_code', False),
-                        'min_quantity': [{"min_quantity": item.min_quantity, "price": price}],
-                        'category_id': product_info[0]['categ_id'][0],
-                        'image_1920': product_info[0]['image_1920'] or '',
-                        'external_id': product_info[0]['external_id']
-                    }
-                    if item.product_tmpl_id.id not in [p['id'] for p in data]:
-                        data.append(product_dict)
-                    else:                    
-                        for p in data:
-                            if p['id'] == item.product_tmpl_id.id:
-                                dict = {
-                                    'min_quantity': item.min_quantity,
-                                    'price': price
-                                }
-                                p['min_quantity'].append(dict)
-                                break
-                            
-                elif item.categ_id.id:
-                    # If filtering by category_ids, check if this item's category is in the list
-                    if category_ids and item.categ_id.id not in category_ids:
-                        continue
-                        
-                    domain = [('categ_id', '=', item.categ_id.id)]
+                        price = product_info['list_price'] * (1 - (item.price_discount / 100))
                     
-                    # If filtering by category_ids, add the filter to the domain
-                    if category_ids:
-                        domain = [('categ_id', 'in', category_ids)]
+                    # Check if product already in data
+                    product_in_data = next((p for p in data if p['id'] == item.product_tmpl_id.id), None)
                     
-                    products_in_category = env['product.template'].sudo().search_read(domain, [
-                        'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score', 'code_', 'categ_id','image_1920','default_code','external_id'
-                    ])
-                    
-                    # Process each product in the category
-                    for product_info in products_in_category:
-                        price = 0
-                        if item.compute_price == 'percentage':
-                            price = item.percent_price
-                        elif item.compute_price == 'fixed':
-                            price = item.fixed_price
-                        elif item.compute_price == 'formula':
-                            price = product_info['list_price'] * (1 - (item.price_discount / 100))
-                            
-                        # FIX: Initialize min_quantity as a list instead of an integer
+                    if not product_in_data:
                         product_dict = {
                             'name': product_info['name'],
                             'list_price': price,
                             'active': product_info['active'],
                             'barcode': product_info['barcode'],
                             'color': product_info['color'],
-                            'id': product_info['id'],
+                            'id': item.product_tmpl_id.id,
                             'discount': product_info.get('discount', 0),
                             'is_published': product_info.get('is_published', False),
                             'rewards_score': product_info.get('rewards_score', 0),
                             'code_': product_info.get('default_code', False),
-                            'min_quantity': [],  # Changed from 0 to an empty list
+                            'min_quantity': [{"min_quantity": item.min_quantity, "price": price}],
                             'category_id': product_info['categ_id'][0],
                             'image_1920': product_info['image_1920'] or '',
                             'external_id': product_info['external_id']
                         }
-                        if product_info['id'] not in [p['id'] for p in data]:
-                            data.append(product_dict)
-                        else:
-                            for p in data:
-                                if p['id'] == product_info['id']:
-                                    dict = {
-                                        'min_quantity': 0,
-                                        'price': price
-                                    }
-                                    p['min_quantity'].append(dict)
-                                    break
-                        
-                else:
-                    print("Global Price:", item.fixed_price)
-            print("Count:", count)
-            
-            # If we're filtering by category, calculate total_items after filtering
-        if category_ids:
-            total_items = len(data)
+                        data.append(product_dict)
+                    else:
+                        product_in_data['min_quantity'].append({
+                            'min_quantity': item.min_quantity,
+                            'price': price
+                        })
+                
+                # Category-specific price rule
+                elif item.categ_id.id:
+                    # Skip if filtering by category and this category not in filter
+                    if category_ids and item.categ_id.id not in category_ids:
+                        continue
+                    
+                    # Get all products in this category
+                    for product_id, product_info in products_dict.items():
+                        if product_info['categ_id'][0] == item.categ_id.id:
+                            price = 0
+                            if item.compute_price == 'percentage':
+                                price = item.percent_price
+                            elif item.compute_price == 'fixed':
+                                price = item.fixed_price
+                            elif item.compute_price == 'formula':
+                                price = product_info['list_price'] * (1 - (item.price_discount / 100))
+                            
+                            # Check if product already in data
+                            product_in_data = next((p for p in data if p['id'] == product_id), None)
+                            
+                            if not product_in_data:
+                                product_dict = {
+                                    'name': product_info['name'],
+                                    'list_price': price,
+                                    'active': product_info['active'],
+                                    'barcode': product_info['barcode'],
+                                    'color': product_info['color'],
+                                    'id': product_id,
+                                    'discount': product_info.get('discount', 0),
+                                    'is_published': product_info.get('is_published', False),
+                                    'rewards_score': product_info.get('rewards_score', 0),
+                                    'code_': product_info.get('default_code', False),
+                                    'min_quantity': [{"min_quantity": item.min_quantity, "price": price}],
+                                    'category_id': product_info['categ_id'][0],
+                                    'image_1920': product_info['image_1920'] or '',
+                                    'external_id': product_info['external_id']
+                                }
+                                data.append(product_dict)
+                            else:
+                                product_in_data['min_quantity'].append({
+                                    'min_quantity': item.min_quantity,
+                                    'price': price
+                                })
         
-        pagination_info = {
+        # Calculate total items before pagination
+        total_items = len(data)
+        
+        # Apply pagination if not filtering by category
+        if not category_ids and total_items > 0:
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            data = data[start_idx:end_idx]
+    
+        return data, self._get_pagination_info(total_items, page, page_size)
+    
+    def _get_pagination_info(self, total_items, page, page_size):
+        """Helper method to generate pagination info"""
+        return {
             'total_items': total_items,
             'total_pages': math.ceil(total_items / page_size) if total_items > 0 else 0,
             'current_page': page,
@@ -187,7 +193,6 @@ class MobileEcommerceApiController(http.Controller):
             'has_next': page < math.ceil(total_items / page_size) if total_items > 0 else False,
             'has_previous': page > 1
         }
-        return data, pagination_info
 
     @http.route('/api/products', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_products(self):
@@ -213,6 +218,7 @@ class MobileEcommerceApiController(http.Controller):
                 # Split by comma and convert to integers
                 category_ids = [int(cat_id) for cat_id in category_param.split(',') if cat_id.strip()]
             
+            # Authenticate user
             user_info = SocialMediaAuth.user_auth(self)
             if user_info['status'] == 'error':
                 return Response(
@@ -228,6 +234,7 @@ class MobileEcommerceApiController(http.Controller):
 
             partner_id = user_info['user_id']
             
+            # Get product data with pricing
             products_data, pagination_info = self.get_product_list_price(
                 partner_id, 
                 page, 
@@ -235,46 +242,64 @@ class MobileEcommerceApiController(http.Controller):
                 category_ids
             )
 
+            # Get cart items for this partner
             order_lines = request.env['sale.order.line'].sudo().search([
                 ('order_id.partner_id', '=', partner_id),
                 ('order_id.state', '=', 'draft')
             ])
 
-            cart_lines_map = []
+            # Create a map of product_id to cart line for efficient lookup
+            cart_lines_map = {}
             for line in order_lines:
-                dict = {}
-                dict['product_id'] = line.product_id.id
-                dict['cart_line_id'] = line.id
-                dict['product_uom_qty'] = line.product_uom_qty
-                cart_lines_map.append(dict)
+                product_tmpl_id = line.product_id.product_tmpl_id.id
+                cart_lines_map[product_tmpl_id] = {
+                    'cart_line_id': line.id,
+                    'product_uom_qty': line.product_uom_qty,
+                    'product_id': line.product_id.id
+                }
 
-            product_list = []
+            # Pre-fetch all product variants in one query for efficiency
+            template_ids = [product['id'] for product in products_data]
+            product_variants = request.env['product.product'].sudo().search_read(
+                [('product_tmpl_id', 'in', template_ids)],
+                ['id', 'product_tmpl_id']
+            )
             
+            # Create a map of template_id to variant_id for efficient lookup
+            template_to_variant = {}
+            for variant in product_variants:
+                if variant['product_tmpl_id'][0] not in template_to_variant:
+                    template_to_variant[variant['product_tmpl_id'][0]] = variant['id']
+
+            # Process product data
+            product_list = []
             for product in products_data:
-                product_template = request.env['product.product'].sudo().search([('product_tmpl_id', '=', product['id'])])
-                cart_line = None
-                for line in cart_lines_map:
-                    if line['product_id'] == product['id'] or line['product_id'] == product_template.id:
-                        cart_line = line
-                        break
-                
+                # Check if this product is in the cart
+                cart_line = cart_lines_map.get(product['id'])
                 quantity = cart_line['product_uom_qty'] if cart_line else 0
                 cart_line_id = cart_line['cart_line_id'] if cart_line else None
                 
+                # Get minimum quantity price using the new function
+                min_quantity_price_info = ProductPriceController.get_min_quantity_price(product['id'], partner_id)
                 
-                final_price = ProductPriceController.calculate_price_product(product["id"], quantity, partner_id)
+                # Set the final price to the min quantity price
+                final_price = min_quantity_price_info['price']
+                
+                # Apply discount if needed
                 if product['discount']:
                     final_price = final_price * (1 - (product['discount'] / 100))
                 
-                pr_id = product['id']
+                # Get product image URL
+                product_id = product['id']
+                image_url = f'/web/image/product.template/{product_id}/image_1920' if product['image_1920'] else None
                 
+                # Create the product data dictionary
                 product_data = {
                     'name': product['name'],
                     'list_price': final_price,
                     'active': product['active'], 
                     'barcode': product['barcode'],
                     'color': product['color'],
-                    'image': "/web/image?model=res.users&field=avatar_128&id=2",
                     'id': product['id'],
                     'quantity': quantity,
                     'cart_line_id': cart_line_id,
@@ -282,14 +307,17 @@ class MobileEcommerceApiController(http.Controller):
                     'is_published': product["is_published"],
                     'rewards_score': product["rewards_score"],
                     'code': product["code_"] if product["code_"] else None,
-                    'discounted_price': final_price*quantity,
-                    'min_quantity': product.get('min_quantity'),
+                    'discounted_price': final_price * quantity,
+                    'min_quantity': min_quantity_price_info['min_quantity'],
+                    'min_quantity_price': min_quantity_price_info['price'],
+                    'min_quantity_rules': min_quantity_price_info['price_rules'],
                     'category_id': product['category_id'],
                     'external_id': product['external_id'],
-                    'image': f'/web/image/product.template/{pr_id}/image_1920' if product['image_1920'] else None,
+                    'image': image_url,
                 }
                 product_list.append(product_data)
 
+            # Prepare and return the response
             response_data = {
                 'status': 'success',
                 'message': 'Prodotti recuperati con successo',
@@ -306,6 +334,7 @@ class MobileEcommerceApiController(http.Controller):
             )
 
         except Exception as e:
+            _logger.error(f"Error in get_products: {str(e)}")
             return Response(
                 json.dumps({
                     'status': 'error',
@@ -316,7 +345,9 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
-              
+            
+                 
+    #product code
     @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_product_image(self, product_id, image):
         try:

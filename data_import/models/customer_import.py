@@ -88,7 +88,7 @@ class DataImporter(models.TransientModel):
                                 'street': row['street'],
                                 'city': row['city'],
                                 'zip': row['zip'],
-                                'country_id': 110,
+                                'country_id': 109,
                                 'vat': row['vat'],
                                 # 'l10n_it_codice_fiscale': row['l10n_it_codice_fiscale'],
                                 'property_product_pricelist': pricelist.id,
@@ -100,15 +100,27 @@ class DataImporter(models.TransientModel):
                                 'partner_id': customer.id
                             })
                             
-                            # Send welcome email after customer creation
-                            if customer.email:
-                                try:
-                                    self._send_welcome_email(customer, customer.email)
-                                    _logger.info(f"Welcome email sent to {customer.email}")
-                                except Exception as email_error:
-                                    _logger.error(f"Error sending welcome email to {customer.email}: {email_error}")
+                            self.env['social_media.custom_address'].create({
+                                'partner_id': customer.id,
+                                'address': row['street'],
+                                'continued_address': row.get('street2', ''),
+                                'city': row['city'],
+                                'postal_code': row['zip'],
+                                'village': '',
+                                'default': True,
+                                'country_id': 109,  # Using the same country_id as in customer creation
+                                'state_id': row.get('state_id', False)
+                            })
                             
-                            _logger.info(f"Created customer {customer.name} (ID: {customer_id})")
+                            # Send welcome email after customer creation
+                            # if customer.email:
+                            #     try:
+                            #         self._send_welcome_email(customer, customer.email)
+                            #         _logger.info(f"Welcome email sent to {customer.email}")
+                            #     except Exception as email_error:
+                            #         _logger.error(f"Error sending welcome email to {customer.email}: {email_error}")
+                            
+                            # _logger.info(f"Created customer {customer.name} (ID: {customer_id})")
                     
                     except Exception as e:
                         _logger.error(f"Error processing customer {row.get('name', 'Unknown')}: {e}")

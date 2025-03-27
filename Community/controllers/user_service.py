@@ -134,6 +134,13 @@ class Users(http.Controller):
                     # Continue with login even if notification fails
             
             pricelist_name = request.env['res.partner'].sudo().browse(customer.id).property_product_pricelist.name
+            default_address = request.env['social_media.custom_address'].sudo().search([
+                ('partner_id', '=', customer.id),
+                ('default', '=', True)
+            ], limit=1)
+
+            address = ", ".join(filter(None, [default_address.address, default_address.continued_address, default_address.village, default_address.city, default_address.postal_code, default_address.state_id.name if default_address.state_id else None, default_address.country_id.name if default_address.country_id else None])) if default_address else ""
+            
             return {
                 "status": "success",
                 "message": "Accesso eseguito con successo",
@@ -143,7 +150,8 @@ class Users(http.Controller):
                     'email': customer.email,
                     'phone': customer.phone,
                     'company_id': customer.company_id.id if customer.company_id else False,
-                     'pricelist_name': pricelist_name or '',
+                    'pricelist_name': pricelist_name or '',
+                    'shipping_address':address,
                     'lang': customer.lang or 'en_US'
                 },
                 "token": token if isinstance(token, str) else token.decode('utf-8')

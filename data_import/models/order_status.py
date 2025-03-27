@@ -78,7 +78,7 @@ class DataImporter(models.TransientModel):
                             # Store notification in database
                             request.env['notification.storage'].sudo().create({
                                 'message': message,
-                                'patner_id': partner_id,  # Note: There's a typo here - "patner_id" should be "partner_id"
+                                'partner_id': partner_id, 
                                 'title': 'Aggiornamento Ordine',
                                 'data': {'type': 'order_status_change', 'new_status': new_status},
                                 'include_player_ids': device_token,

@@ -35,7 +35,7 @@ class DataImporter(models.TransientModel):
                     partner_id = order.partner_id.id
                     
                     order_status = order.state
-                    if order_status == record['state'] and record['state'] != 'sale':
+                    if order_status == record['state'] and order.sale_notification:
                         _logger.info(f"Order {order.name} already has status {record['state']}")
                         continue
                     
@@ -52,13 +52,15 @@ class DataImporter(models.TransientModel):
                         
                     message = ""
                     if record['state'] == 'sale':
-                        message = f"Your order {record['mobile_app_order_ref']} has been shipped!"
+                        message = f"Your order {order.name} has been shipped!"
+                        # Mark that notification for sale status was sent
+                        order.write({'sale_notification': True})
                     elif record['state'] == 'draft':
-                        message = f"Your order {record['mobile_app_order_ref']} is being processed."
+                        message = f"Your order {order.name} is being processed."
                     elif record['state'] == 'cancel':
-                        message = f"Your order {record['mobile_app_order_ref']} has been canceled."
+                        message = f"Your order {order.name} has been canceled."
                     elif record['state'] == 'invoice':
-                        message = f"The invoice {record['mobile_app_order_ref']} for your order has been confirmed."
+                        message = f"The invoice for your order {order.name} has been confirmed."
 
                     order.write({'state': record['state']})
                     new_status = record['state']

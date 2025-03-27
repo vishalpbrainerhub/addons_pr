@@ -269,7 +269,7 @@ class Ecommerce_orders(http.Controller):
                 
                 return {
                     'status': 'error',
-                    'message': f'Quantità minima non raggiunta per alcuni prodotti: {product_list}',
+                    'message': f'Mini Q. richiesto {product_list}',
                     'info': f'Minimum quantity not met for some products: {product_list}',
                     'invalid_items': invalid_quantities
                 }, 400

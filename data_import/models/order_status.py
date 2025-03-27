@@ -39,15 +39,26 @@ class DataImporter(models.TransientModel):
                         _logger.info(f"Order {order.name} already has status {record['state']}")
                         continue
                     
+                    # message = ""
+                    # if record['state'] == 'sale':
+                    #     message = "Il tuo ordine è stato spedito!"
+                    # elif record['state'] == 'draft':
+                    #     message = "Il tuo ordine è in fase elaborazione."
+                    # elif record['state'] == 'cancel':
+                    #     message = "Il tuo ordine è stato cancellato."
+                    # elif record['state'] == 'invoice':
+                    #     message = "La fattura del tuo ordine è stata confermata."
+                        
+                        
                     message = ""
                     if record['state'] == 'sale':
-                        message = "Il tuo ordine è stato spedito!"
+                        message = "Your order has been shipped!"
                     elif record['state'] == 'draft':
-                        message = "Il tuo ordine è in fase elaborazione."
+                        message = "Your order is being processed."
                     elif record['state'] == 'cancel':
-                        message = "Il tuo ordine è stato cancellato."
+                        message = "Your order has been canceled."
                     elif record['state'] == 'invoice':
-                        message = "La fattura del tuo ordine è stata confermata."
+                        message = "The invoice for your order has been confirmed."
 
                     order.write({'state': record['state']})
                     new_status = record['state']

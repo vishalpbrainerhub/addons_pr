@@ -45,28 +45,30 @@ class DataImporter(models.TransientModel):
                             _logger.info(f"Order {order.name} already has status {record['state']}")
                             continue
                     
-                    # message = ""
-                    # if record['state'] == 'sale':
-                    #     message = "Il tuo ordine è stato spedito!"
-                    # elif record['state'] == 'draft':
-                    #     message = "Il tuo ordine è in fase elaborazione."
-                    # elif record['state'] == 'cancel':
-                    #     message = "Il tuo ordine è stato cancellato."
-                    # elif record['state'] == 'invoice':
-                    #     message = "La fattura del tuo ordine è stata confermata."
-                        
-                        
                     message = ""
                     if record['state'] == 'sale':
-                        message = f"Your order {order.name} has been shipped!"
+                        message = f"Il tuo ordine {order.name} è stato spedito!"
                         # Mark that notification for sale status was sent
                         order.write({'sale_notification': True})
                     elif record['state'] == 'draft':
-                        message = f"Your order {order.name} is being processed."
+                        message = f"Il tuo ordine {order.name} è in fase elaborazione."
                     elif record['state'] == 'cancel':
-                        message = f"Your order {order.name} has been canceled."
+                        message = f"Il tuo ordine {order.name} è stato cancellato."
                     elif record['state'] == 'invoice':
-                        message = f"The invoice for your order {order.name} has been confirmed."
+                        message = f"La fattura del tuo ordine {order.name} è stata confermata."
+                        
+                        
+                    # message = ""
+                    # if record['state'] == 'sale':
+                    #     message = f"Your order {order.name} has been shipped!"
+                    #     # Mark that notification for sale status was sent
+                    #     order.write({'sale_notification': True})
+                    # elif record['state'] == 'draft':
+                    #     message = f"Your order {order.name} is being processed."
+                    # elif record['state'] == 'cancel':
+                    #     message = f"Your order {order.name} has been canceled."
+                    # elif record['state'] == 'invoice':
+                    #     message = f"The invoice for your order {order.name} has been confirmed."
 
                     order.write({'state': record['state']})
                     new_status = record['state']

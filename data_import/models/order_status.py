@@ -52,13 +52,13 @@ class DataImporter(models.TransientModel):
                         
                     message = ""
                     if record['state'] == 'sale':
-                        message = "Your order has been shipped!"
+                        message = f"Your order {record['mobile_app_order_ref']} has been shipped!"
                     elif record['state'] == 'draft':
-                        message = "Your order is being processed."
+                        message = f"Your order {record['mobile_app_order_ref']} is being processed."
                     elif record['state'] == 'cancel':
-                        message = "Your order has been canceled."
+                        message = f"Your order {record['mobile_app_order_ref']} has been canceled."
                     elif record['state'] == 'invoice':
-                        message = "The invoice for your order has been confirmed."
+                        message = f"The invoice {record['mobile_app_order_ref']} for your order has been confirmed."
 
                     order.write({'state': record['state']})
                     new_status = record['state']

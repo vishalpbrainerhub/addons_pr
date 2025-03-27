@@ -69,4 +69,12 @@ class PromoCode(models.Model):
        for record in self:
            record.product_id.write({'discount': 0.0})
        return super(PromoCode, self).unlink()
+
+class OrderSale(models.Model):
+    _inherit = 'sale.order'
     
+    sale_notification = fields.Boolean(
+        string='Sales Notification Sent',
+        default=False,
+        help='Indicates whether a notification has been sent for this order'
+    )

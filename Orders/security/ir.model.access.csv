@@ -4,3 +4,5 @@ access_product_template_manager,product.template.manager,product.model_product_t
 access_mobile_ecommerce_cart_user,mobile_ecommerce.cart.user,model_mobile_ecommerce_cart,base.group_user,1,0,0,0
 access_mobile_ecommerce_cart_manager,mobile_ecommerce.cart.manager,model_mobile_ecommerce_cart,base.group_user,1,1,1,1
 access_product_promo_code_user,product.promo.code.user,model_product_promo_code,base.group_user,1,1,1,1
+access_sale_order_notification_user,sale.order.notification.user,model_sale_order,base.group_user,1,1,0,0
+access_sale_order_notification_manager,sale.order.notification.manager,model_sale_order,base.group_system,1,1,1,1

@@ -63,17 +63,7 @@ class DataImporter(models.TransientModel):
                         continue
                         
                         
-                    # message = ""
-                    # if record['state'] == 'sale':
-                    #     message = f"Your order {order.name} has been shipped!"
-                    #     # Mark that notification for sale status was sent
-                    #     order.write({'sale_notification': True})
-                    # elif record['state'] == 'draft':
-                    #     message = f"Your order {order.name} is being processed."
-                    # elif record['state'] == 'cancel':
-                    #     message = f"Your order {order.name} has been canceled."
-                    # elif record['state'] == 'invoice':
-                    #     message = f"The invoice for your order {order.name} has been confirmed."
+
 
                     order.write({'state': record['state']})
                     new_status = record['state']

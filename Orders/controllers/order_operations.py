@@ -257,10 +257,20 @@ class Ecommerce_orders(http.Controller):
 
             # If there are invalid quantities, return error
             if invalid_quantities:
+                # return {
+                #     'status': 'error',
+                #     'message': f'Quantità minima non raggiunta per alcuni prodotti. Minimo {min_required} richiesto.',
+                #     'info': f'Minimum quantity not met for some products. Minimum {min_required} required.',
+                #     'invalid_items': invalid_quantities
+                # }, 400
+                
+    
+                product_list = ', '.join([f"{item['product_name']}: {item['min_required']}" for item in invalid_quantities])
+                
                 return {
                     'status': 'error',
-                    'message': f'Quantità minima non raggiunta per alcuni prodotti. Minimo {min_required} richiesto.',
-                    'info': f'Minimum quantity not met for some products. Minimum {min_required} required.',
+                    'message': f'Quantità minima non raggiunta per alcuni prodotti: {product_list}',
+                    'info': f'Minimum quantity not met for some products: {product_list}',
                     'invalid_items': invalid_quantities
                 }, 400
             else:

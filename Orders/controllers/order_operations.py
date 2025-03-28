@@ -265,13 +265,13 @@ class Ecommerce_orders(http.Controller):
                 # }, 400
                 
     
-                product_list = ', '.join([f"{item['product_name']}: {item['min_required']}" for item in invalid_quantities])
-                
+                product_quantity_dict = {item['product_name']: item['min_required'] for item in invalid_quantities}
                 return {
                     'status': 'error',
-                    'message': f'Mini Q. richiesto {product_list}',
-                    'info': f'Minimum quantity not met for some products: {product_list}',
-                    'invalid_items': invalid_quantities
+                    'message': f'Quantità minima non raggiunta per alcuni prodotti',
+                    'info': f'Minimum quantity not met for some products',
+                    'invalid_items': invalid_quantities,
+                    'data': [product_quantity_dict]
                 }, 400
             else:
 

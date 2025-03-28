@@ -9,7 +9,7 @@ from .notification_service import CustomerController
 import os
 
 _logger = logging.getLogger(__name__)
-notification_service = CustomerController()
+
 
 
 class DataImporter(models.TransientModel):
@@ -21,6 +21,8 @@ class DataImporter(models.TransientModel):
         try:
             _logger.info("Starting order status import process...")
             file_path = os.environ.get('ORDER_STATUS_DATA_PATH')
+            
+            notification_service = CustomerController()
             with open(file_path, 'r', encoding='utf-8') as file:
                 reader = csv.DictReader(file)
                 records = [row for row in reader if row.get('id')]

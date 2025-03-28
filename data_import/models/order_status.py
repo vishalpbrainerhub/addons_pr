@@ -33,7 +33,12 @@ class DataImporter(models.TransientModel):
                     if record['state'] == 'error':
                         continue
                     
+                    
                     order = self.env['sale.order'].search([('id', '=', int(record['mobile_app_order_ref']))], limit=1)
+                    if not order:
+                        _logger.warning(f"Order with reference {record['mobile_app_order_ref']} not found")
+                        continue
+                    
                     partner_id = order.partner_id.id
                     
                     order_status = order.state
@@ -71,9 +76,9 @@ class DataImporter(models.TransientModel):
 
                     order.write({'state': record['state']})
                     new_status = record['state']
-                    filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    filter_notification = self.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
                     if filter_notification.order:
-                        customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                        customer = self.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
                         device_token = customer.onesignal_player_id       
                         if device_token:
                             # Send notification about order status change
@@ -85,7 +90,7 @@ class DataImporter(models.TransientModel):
                             )
                             
                             # Store notification in database
-                            request.env['notification.storage'].sudo().create({
+                            self.env['notification.storage'].sudo().create({
                                 'message': message,
                                 'patner_id': partner_id, 
                                 'title': 'Aggiornamento Ordine',

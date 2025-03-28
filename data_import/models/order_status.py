@@ -42,7 +42,7 @@ class DataImporter(models.TransientModel):
                     partner_id = order.partner_id.id
                     
                     order_status = order.state
-                    _logger.info(f'Checking for {order.name} and current state is {order.state} and csv state is {order_status} and sale flag is {order.sale_notification}')
+                    _logger.warning(f'Checking for {order.name} and current state is {order.state} and csv state is {order_status} and sale flag is {order.sale_notification}')
                     
                     if order_status == record['state']:
                         # For 'sale' status, also check if notification was already sent

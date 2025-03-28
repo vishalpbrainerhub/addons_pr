@@ -21,6 +21,7 @@ class DataImporter(models.TransientModel):
         try:
             _logger.info("Starting order status import process...")
             file_path = os.environ.get('ORDER_STATUS_DATA_PATH')
+            _logger.warning(f"Using file path: {file_path}")
             
             notification_service = CustomerController()
             with open(file_path, 'r', encoding='utf-8') as file:
@@ -29,8 +30,10 @@ class DataImporter(models.TransientModel):
                 _logger.info(f"Found {len(records)} records in CSV")
                 
                 for record in records:
+                    _logger.warning(f"Processing record ID: {record.get('id')} with state: {record.get('state')}")
                     
                     if record['state'] == 'error':
+                        _logger.warning(f"Skipping record with ID {record.get('id')} due to error state")
                         continue
                     
                     
@@ -40,6 +43,7 @@ class DataImporter(models.TransientModel):
                         continue
                     
                     partner_id = order.partner_id.id
+                    _logger.warning(f"Found partner ID: {partner_id} for order {order.name}")
                     
                     order_status = order.state
                     _logger.warning(f'Checking for {order.name} and current state is {order.state} and csv state is {order_status} and sale flag is {order.sale_notification}')
@@ -79,30 +83,47 @@ class DataImporter(models.TransientModel):
                     order.write({'state': record['state']})
                     new_status = record['state']
                     filter_notification = self.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    _logger.warning(f"Notification filter status for partner {partner_id}: {filter_notification and 'Found' or 'Not Found'}")
+                    if filter_notification:
+                        _logger.warning(f"Order notifications enabled for partner {partner_id}: {filter_notification.order}")
+                    
                     if filter_notification.order:
                         customer = self.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-                        device_token = customer.onesignal_player_id       
+                        _logger.warning(f"Customer notification record for partner {partner_id}: {customer and 'Found' or 'Not Found'}")
+                        
+                        device_token = customer.onesignal_player_id
+                        _logger.warning(f"Device token for partner {partner_id}: {device_token or 'None'}")
+                             
                         if device_token:
                             # Send notification about order status change
-                            notification_service.send_onesignal_notification(
-                                device_token,
-                                message,
-                                'Aggiornamento Ordine',
-                                {'type': 'order_status_change', 'new_status': new_status}
-                            )
+                            _logger.warning(f"Attempting to send notification to {device_token} for order {order.name}")
+                            try:
+                                notification_service.send_onesignal_notification(
+                                    device_token,
+                                    message,
+                                    'Aggiornamento Ordine',
+                                    {'type': 'order_status_change', 'new_status': new_status}
+                                )
+                                _logger.warning(f"Notification sent successfully to {device_token} for order {order.name}")
+                            except Exception as notification_error:
+                                _logger.warning(f"Failed to send notification: {notification_error}")
                             
                             # Store notification in database
-                            self.env['notification.storage'].sudo().create({
-                                'message': message,
-                                'patner_id': partner_id, 
-                                'title': 'Aggiornamento Ordine',
-                                'data': {'type': 'order_status_change', 'new_status': new_status},
-                                'include_player_ids': device_token,
-                                'filter': 'order'
-                            })
+                            try:
+                                self.env['notification.storage'].sudo().create({
+                                    'message': message,
+                                    'patner_id': partner_id, 
+                                    'title': 'Aggiornamento Ordine',
+                                    'data': {'type': 'order_status_change', 'new_status': new_status},
+                                    'include_player_ids': device_token,
+                                    'filter': 'order'
+                                })
+                                _logger.warning(f"Notification stored in database for partner {partner_id}")
+                            except Exception as storage_error:
+                                _logger.warning(f"Failed to store notification: {storage_error}")
 
                             
-                    _logger.info(f"Order {order.name} updated to status {record['state']}")
+                    _logger.warning(f"Order {order.name} updated to status {record['state']}")
                 return True
         except Exception as e:
             _logger.error(f"Error importing order status: {e}")

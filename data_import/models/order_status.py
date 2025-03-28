@@ -41,7 +41,7 @@ class DataImporter(models.TransientModel):
                     
                     partner_id = order.partner_id.id
                     
-                    _logger.info(f'Checking for {order.name} and current state is {order.state} and csv state is {record['state']}')
+                    _logger.info(f'Checking for {order.name} and current state is {order.state} and csv state is {record['state']} and sale flag is {order.sale_notification}')
                     
                     order_status = order.state
                     if order_status == record['state']:

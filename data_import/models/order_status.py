@@ -50,8 +50,8 @@ class DataImporter(models.TransientModel):
                         message = f"Il tuo ordine {order.name} è stato confermato!"
                         # Mark that notification for sale status was sent
                         order.write({'sale_notification': True})
-                    elif record['state'] == 'draft':
-                        message = f"Il tuo ordine {order.name} è in fase di preventivo."
+                    # elif record['state'] == 'draft':
+                    #     message = f"Il tuo ordine {order.name} è in fase di preventivo."
                     elif record['state'] == 'sent':
                         message = f"Il preventivo per il tuo ordine {order.name} è stato inviato."
                     elif record['state'] == 'done':
@@ -63,7 +63,9 @@ class DataImporter(models.TransientModel):
                         continue
                         
                         
-
+                    if record['state'] == 'draft':
+                        _logger.info(f"Skipping update for order {order.name} - incoming status is 'draft'")
+                        continue
 
                     order.write({'state': record['state']})
                     new_status = record['state']

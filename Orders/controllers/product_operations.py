@@ -572,12 +572,23 @@ class MobileEcommerceApiController(http.Controller):
                 # find the product id in pricelist items for price based on customer pricelist
                 
                 if quantity > 0:
+                    
+                    # new_line = env.sudo().create({
+                    #     'order_id': sale_order.id,
+                    #     'product_id': product.id,
+                    #     'product_uom_qty': quantity,
+                    #     'price_unit': product.list_price,
+                    # })
+                    
+                    final_price = ProductPriceController.calculate_price_product(product.id, quantity, partner_id)
+                    
                     new_line = env.sudo().create({
-                        'order_id': sale_order.id,
-                        'product_id': product.id,
-                        'product_uom_qty': quantity,
-                        'price_unit': product.list_price,
-                    })
+                                            'order_id': sale_order.id,
+                                            'product_id': product.id,
+                                            'product_uom_qty': quantity,
+                                            'price_unit': final_price,
+                                        })
+
                     return {
                         'status': 'success',
                         'message': 'Prodotto aggiunto al carrello con successo',

@@ -91,6 +91,7 @@ class Ecommerce_orders(http.Controller):
                     'partner_id': order.partner_id.id,
                     'partner_name': order.partner_id.name,
                     'partner_email': order.partner_id.email,
+                    'external_order_state':order.external_order_state,
                     'partner_phone': order.partner_id.phone,
                     'partner_address': shipping_address,
                     'vat_1_percentage': vat_data['vat_1_percentage'],
@@ -100,6 +101,7 @@ class Ecommerce_orders(http.Controller):
                     'vat_2_value': vat_data['vat_2_value'],
                     'total_amount': order.amount_total,
                     'reward_points': order_reward_points,
+                    ''
                     'all_products': []
                 }
 

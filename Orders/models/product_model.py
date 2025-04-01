@@ -78,3 +78,8 @@ class OrderSale(models.Model):
         default=False,
         help='Indicates whether a notification has been sent for this order'
     )
+    external_order_state = fields.Char(
+        string='External Order State',
+        default='draft',
+        help='Stores the state of the order in external system'
+    )

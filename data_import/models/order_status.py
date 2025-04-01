@@ -42,6 +42,9 @@ class DataImporter(models.TransientModel):
                         _logger.warning(f"Order with reference {record['mobile_app_order_ref']} not found")
                         continue
                     
+                    # update external order state
+                    order.write({'external_order_state': record['state']})
+                    
                     partner_id = order.partner_id.id
                     _logger.warning(f"Found partner ID: {partner_id} for order {order.name}")
                     

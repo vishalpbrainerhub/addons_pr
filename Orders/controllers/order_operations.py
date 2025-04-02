@@ -13,36 +13,100 @@ notification_service = CustomerController()
 
 class Ecommerce_orders(http.Controller):
     
+    # def _calculate_vat(self, order):
+    #     tax_groups = {}
+        
+    #     for line in order.order_line:
+    #         line_amount = line.price_subtotal
+    #         for tax in line.tax_id:
+    #             if tax.amount not in tax_groups:
+    #                 tax_groups[tax.amount] = {
+    #                     'percentage': tax.amount,
+    #                     'value': line_amount * (tax.amount / 100)
+    #                 }
+    #             else:
+    #                 tax_groups[tax.amount]['value'] += line_amount * (tax.amount / 100)
+
+    #     # Sort tax rates and get the first two if they exist
+    #     sorted_taxes = sorted(tax_groups.items())
+    #     vat_data = {
+    #         'vat_1_percentage': 0,
+    #         'vat_2_percentage': 0,
+    #         'vat_1_value': 0,
+    #         'vat_2_value': 0
+    #     }
+
+    #     if sorted_taxes:
+    #         vat_data['vat_1_percentage'] = sorted_taxes[0][0]
+    #         vat_data['vat_1_value'] = sorted_taxes[0][1]['value']
+            
+    #         if len(sorted_taxes) > 1:
+    #             vat_data['vat_2_percentage'] = sorted_taxes[1][0]
+    #             vat_data['vat_2_value'] = sorted_taxes[1][1]['value']
+
+    #     return vat_data
+    
     def _calculate_vat(self, order):
+        """
+        Calculate VAT (IVA) for an order by grouping taxes by their rates.
+        Returns tax data with up to two different tax rates sorted by significance.
+        
+        Args:
+            order: The sale.order object
+            
+        Returns:
+            dict: Dictionary containing vat percentages and values
+        """
         tax_groups = {}
         
+        # Process each order line
         for line in order.order_line:
+            # Skip lines with no taxes
+            if not line.tax_id:
+                continue
+                
             line_amount = line.price_subtotal
+            
+            # Process each tax on the line
             for tax in line.tax_id:
-                if tax.amount not in tax_groups:
-                    tax_groups[tax.amount] = {
-                        'percentage': tax.amount,
-                        'value': line_amount * (tax.amount / 100)
+                # Skip non-percentage taxes if any
+                if not hasattr(tax, 'amount') or tax.amount_type != 'percent':
+                    continue
+                    
+                tax_rate = float(tax.amount)
+                
+                # Initialize the tax group if it doesn't exist
+                if tax_rate not in tax_groups:
+                    tax_groups[tax_rate] = {
+                        'percentage': tax_rate,
+                        'value': 0.0
                     }
-                else:
-                    tax_groups[tax.amount]['value'] += line_amount * (tax.amount / 100)
-
-        # Sort tax rates and get the first two if they exist
-        sorted_taxes = sorted(tax_groups.items())
+                
+                # Calculate and add tax value
+                # Using round to handle proper decimal precision
+                tax_value = round(line_amount * (tax_rate / 100.0), 2)
+                tax_groups[tax_rate]['value'] += tax_value
+        
+        # Sort tax groups by value (descending) to get most significant taxes first
+        sorted_taxes = sorted(tax_groups.items(), key=lambda x: x[1]['value'], reverse=True)
+        
+        # Initialize return structure with defaults
         vat_data = {
-            'vat_1_percentage': 0,
-            'vat_2_percentage': 0,
-            'vat_1_value': 0,
-            'vat_2_value': 0
+            'vat_1_percentage': 0.0,
+            'vat_2_percentage': 0.0,
+            'vat_1_value': 0.0,
+            'vat_2_value': 0.0
         }
 
+        # Populate with first tax group (most significant by value)
         if sorted_taxes:
             vat_data['vat_1_percentage'] = sorted_taxes[0][0]
-            vat_data['vat_1_value'] = sorted_taxes[0][1]['value']
+            vat_data['vat_1_value'] = round(sorted_taxes[0][1]['value'], 2)
             
+            # Populate with second tax group if exists
             if len(sorted_taxes) > 1:
                 vat_data['vat_2_percentage'] = sorted_taxes[1][0]
-                vat_data['vat_2_value'] = sorted_taxes[1][1]['value']
+                vat_data['vat_2_value'] = round(sorted_taxes[1][1]['value'], 2)
 
         return vat_data
 

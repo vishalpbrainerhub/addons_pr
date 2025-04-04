@@ -41,7 +41,7 @@ class NotificationController(http.Controller):
                 'title': notif.title,
                 'data': notif.data,
                 'filter': notif.filter,
-                'create_date': self._serialize_datetime(notif.create_date),
+                'create_date':notif.italian_timestamp,
                 'read_status': notif.read_status
             } for notif in notifications]
             

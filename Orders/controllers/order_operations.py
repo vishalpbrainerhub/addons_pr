@@ -135,7 +135,7 @@ class Ecommerce_orders(http.Controller):
             reward_points_records = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)])
             order_reward_points = sum(reward_points_records.mapped('points')) if reward_points_records else 0
             response_data = []
-
+    
             for order in orders:
                 user_address = request.env['social_media.custom_address'].sudo().search([
                     ('id', '=', order.shipping_address_id)

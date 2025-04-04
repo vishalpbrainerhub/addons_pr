@@ -1,5 +1,7 @@
 from odoo import models, fields, api
 from passlib.context import CryptContext
+from datetime import datetime
+import pytz
 
 class CustomerPassword(models.Model):
     _name = 'customer.password'
@@ -44,6 +46,21 @@ class NoticationStorage(models.Model):
     post_id = fields.Many2one('social_media.post', string='Post', ondelete='cascade', required=False)
     comment_id = fields.Many2one('social_media.comment', string='Comment', ondelete='cascade', required=False)
     
+    italian_timestamp = fields.Char(string='Italian Timestamp', compute='_compute_italian_timestamp')
+
+    def _compute_italian_timestamp(self):
+        italian_tz = pytz.timezone('Europe/Rome')
+        
+        for record in self:
+            if record.create_date:
+                # Localize the UTC datetime to Italian timezone
+                dt_utc = pytz.utc.localize(record.create_date)
+                dt_italy = dt_utc.astimezone(italian_tz)
+                record.italian_timestamp = dt_italy.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                record.italian_timestamp = False
+                
+                
 class NotificationStatus(models.Model):
     _name = 'notification.status'
     _description = 'Notification Status'

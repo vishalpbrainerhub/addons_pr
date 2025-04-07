@@ -67,7 +67,7 @@ class DataImporter(models.TransientModel):
             _logger.info("Starting customer import process...")
             file_path = os.environ.get('CUSTOMER_DATA_PATH')
             with open(file_path, 'r', encoding='utf-8') as file:
-                reader = csv.DictReader(file)  # Remove delimiter='\t'
+                reader = csv.DictReader(file)
                 records = [row for row in reader if row.get('id')]
                 _logger.info(f"Found {len(records)} customers in CSV")
                 for row in records:
@@ -76,12 +76,61 @@ class DataImporter(models.TransientModel):
                         price_list = ast.literal_eval(row['property_product_pricelist'])
                         category_id = int(price_list[0]) if isinstance(price_list, tuple) else int(ast.literal_eval(price_list)[0])
                         
-                        if not self.env['external.import'].search_count([('external_import_id', '=', customer_id)]):
-                            pricelist = self.env['product.pricelist'].search([('external_id', '=', category_id)], limit=1)
-                            if not pricelist:
-                                _logger.error(f"Pricelist not found for category_id: {category_id}")
-                                continue
+                        # Check if customer already exists based on external import ID
+                        existing_import = self.env['external.import'].search([('external_import_id', '=', customer_id)], limit=1)
+                        
+                        # Find the pricelist
+                        pricelist = self.env['product.pricelist'].search([('external_id', '=', category_id)], limit=1)
+                        if not pricelist:
+                            _logger.error(f"Pricelist not found for category_id: {category_id}")
+                            continue
+                        
+                        if existing_import:
+                            # Update existing customer
+                            existing_customer = existing_import.partner_id
+                            _logger.info(f"Updating existing customer {existing_customer.name} (ID: {customer_id})")
+                            
+                            # Update customer information
+                            existing_customer.write({
+                                'name': row['name'],
+                                'email': row['email'],
+                                'street': row['street'],
+                                'city': row['city'],
+                                'zip': row['zip'],
+                                'vat': row['vat'],
+                                'property_product_pricelist': pricelist.id,
+                            })
+                            
+                            # Update or create the custom address
+                            existing_address = self.env['social_media.custom_address'].search([
+                                ('partner_id', '=', existing_customer.id),
+                                ('default', '=', True)
+                            ], limit=1)
+                            
+                            if existing_address:
+                                existing_address.write({
+                                    'address': row['street'],
+                                    'continued_address': row.get('street2', ''),
+                                    'city': row['city'],
+                                    'postal_code': row['zip'],
+                                    'state_id': row.get('state_id', False)
+                                })
+                            else:
+                                # Create new address if none exists
+                                self.env['social_media.custom_address'].create({
+                                    'partner_id': existing_customer.id,
+                                    'address': row['street'],
+                                    'continued_address': row.get('street2', ''),
+                                    'city': row['city'],
+                                    'postal_code': row['zip'],
+                                    'village': '',
+                                    'default': True,
+                                    'country_id': 109,
+                                    'state_id': row.get('state_id', False)
+                                })
                                 
+                        else:
+                            # Create new customer
                             customer = self.env['res.partner'].create({
                                 'name': row['name'],
                                 'email': row['email'],
@@ -95,11 +144,13 @@ class DataImporter(models.TransientModel):
                                 'company_id': 1,
                             })
                             
+                            # Create external import record
                             self.env['external.import'].create({
                                 'external_import_id': customer_id,
                                 'partner_id': customer.id
                             })
                             
+                            # Create custom address
                             self.env['social_media.custom_address'].create({
                                 'partner_id': customer.id,
                                 'address': row['street'],
@@ -108,11 +159,11 @@ class DataImporter(models.TransientModel):
                                 'postal_code': row['zip'],
                                 'village': '',
                                 'default': True,
-                                'country_id': 109,  # Using the same country_id as in customer creation
+                                'country_id': 109,
                                 'state_id': row.get('state_id', False)
                             })
                             
-                            # Send welcome email after customer creation
+                            # Send welcome email commented out in original code
                             # if customer.email:
                             #     try:
                             #         self._send_welcome_email(customer, customer.email)
@@ -120,7 +171,7 @@ class DataImporter(models.TransientModel):
                             #     except Exception as email_error:
                             #         _logger.error(f"Error sending welcome email to {customer.email}: {email_error}")
                             
-                            # _logger.info(f"Created customer {customer.name} (ID: {customer_id})")
+                            _logger.info(f"Created new customer {customer.name} (ID: {customer_id})")
                     
                     except Exception as e:
                         _logger.error(f"Error processing customer {row.get('name', 'Unknown')}: {e}")

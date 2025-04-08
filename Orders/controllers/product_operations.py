@@ -8,9 +8,13 @@ import math
 from .helper_functions import ProductPriceController
 import os
 import base64
+from .test import get_product_price_from_platform
 
 
 class MobileEcommerceApiController(http.Controller):    
+    
+
+
     
     def get_product_list_price(self, partner_id, page=1, page_size=20, category_ids=None, search_term=None):
         """
@@ -211,7 +215,7 @@ class MobileEcommerceApiController(http.Controller):
             'has_next': page < math.ceil(total_items / page_size) if total_items > 0 and page_size > 0 else False,
             'has_previous': page > 1
         }
-        return data, pagination_info
+        return data, pagination_info, pricelist_id
 
     @http.route('/api/products', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_products(self):
@@ -255,7 +259,7 @@ class MobileEcommerceApiController(http.Controller):
 
             partner_id = user_info['user_id']
             
-            products_data, pagination_info = self.get_product_list_price(
+            products_data, pagination_info, pricelist_id = self.get_product_list_price(
                 partner_id, 
                 page, 
                 page_size, 
@@ -289,8 +293,14 @@ class MobileEcommerceApiController(http.Controller):
                 quantity = cart_line['product_uom_qty'] if cart_line else 0
                 cart_line_id = cart_line['cart_line_id'] if cart_line else None
                 
+                # Integrated new price function instead of the old one
+                final_price = get_product_price_from_platform(pricelist_id, product["id"], quantity or 1, partner_id)
                 
-                final_price = ProductPriceController.calculate_price_product(product["id"], quantity, partner_id)
+                # If price retrieval failed, use the one from the product data
+                if final_price is None:
+                    final_price = product['list_price']
+                
+                # Apply discount if applicable
                 if product['discount']:
                     final_price = final_price * (1 - (product['discount'] / 100))
                 
@@ -310,7 +320,7 @@ class MobileEcommerceApiController(http.Controller):
                     'is_published': product["is_published"],
                     'rewards_score': product["rewards_score"],
                     'code': product["code_"] if product["code_"] else None,
-                    'discounted_price': final_price*quantity,
+                    'discounted_price': final_price * quantity if quantity > 0 else final_price,
                     'min_quantity': product.get('min_quantity'),
                     'category_id': product['category_id'],
                     'external_id': product['external_id'],
@@ -347,7 +357,7 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
-             
+        
     @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_product_image(self, product_id, image):
         try:

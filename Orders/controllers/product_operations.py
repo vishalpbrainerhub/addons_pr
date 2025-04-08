@@ -294,7 +294,7 @@ class MobileEcommerceApiController(http.Controller):
                 cart_line_id = cart_line['cart_line_id'] if cart_line else None
                 
                 # Integrated new price function instead of the old one
-                final_price = get_product_price_from_platform(pricelist_id, product["id"], quantity or 1, partner_id)
+                final_price = get_product_price_from_platform(pricelist_id, product_template.id, quantity or 1, partner_id)
                 
                 # If price retrieval failed, use the one from the product data
                 if final_price is None:

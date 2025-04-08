@@ -185,4 +185,4 @@ class DataImporter(models.TransientModel):
 
     def import_all_data(self):
         _logger.info("Starting customer import process...")
-        return self.import_cutomers()
+        return self.import_cutomers()   

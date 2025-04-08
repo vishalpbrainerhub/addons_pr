@@ -1,5 +1,6 @@
 from odoo import http, fields
 from odoo.http import request, Response
+from odoo.osv import expression
 import json
 from .user_authentication import SocialMediaAuth
 import random
@@ -11,7 +12,7 @@ import base64
 
 class MobileEcommerceApiController(http.Controller):    
     
-    def get_product_list_price(self, partner_id, page=1, page_size=20, category_ids=None):
+    def get_product_list_price(self, partner_id, page=1, page_size=20, category_ids=None, search_term=None):
         """
         Get paginated product list with prices
         
@@ -20,6 +21,7 @@ class MobileEcommerceApiController(http.Controller):
             page: Page number (default: 1)
             page_size: Number of items per page (default: 20)
             category_ids: List of category IDs to filter by (optional)
+            search_term: Search term to filter products by code or name (optional)
         """
         cr = request.env.cr
         env = request.env
@@ -48,8 +50,8 @@ class MobileEcommerceApiController(http.Controller):
             # Get all pricelist items first to calculate total
             all_pricelist_items = pricelist.item_ids
             
-            # If we're filtering by category, don't apply pagination
-            if category_ids:
+            # If we're filtering by category or search term, don't apply pagination initially
+            if category_ids or search_term:
                 pricelist_items = all_pricelist_items
             else:
                 total_items = len(all_pricelist_items)
@@ -70,6 +72,14 @@ class MobileEcommerceApiController(http.Controller):
                     # Add category filter if specified
                     if category_ids:
                         domain.append(('categ_id', 'in', category_ids))
+
+                    # Add search term filter if specified
+                    if search_term:
+                        search_domain = ['|',
+                            ('name', 'ilike', search_term),
+                            ('default_code', 'ilike', search_term)
+                        ]
+                        domain = expression.AND([domain, search_domain])
 
                     product_info = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
@@ -127,6 +137,14 @@ class MobileEcommerceApiController(http.Controller):
                     if category_ids:
                         domain = [('categ_id', 'in', category_ids)]
                     
+                    # Add search term filter if specified
+                    if search_term:
+                        search_domain = ['|',
+                            ('name', 'ilike', search_term),
+                            ('default_code', 'ilike', search_term)
+                        ]
+                        domain = expression.AND([domain, search_domain])
+                    
                     products_in_category = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
                         'is_published', 'rewards_score', 'code_', 'categ_id','image_1920','default_code','external_id'
@@ -175,16 +193,22 @@ class MobileEcommerceApiController(http.Controller):
                     print("Global Price:", item.fixed_price)
             print("Count:", count)
             
-            # If we're filtering by category, calculate total_items after filtering
-        if category_ids:
+        # If we're filtering by category or search term, calculate total_items after filtering
+        if category_ids or search_term:
             total_items = len(data)
+        
+        # Apply pagination to the filtered data if search term is provided
+        if search_term and page_size > 0:
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            data = data[start_idx:end_idx]
         
         pagination_info = {
             'total_items': total_items,
-            'total_pages': math.ceil(total_items / page_size) if total_items > 0 else 0,
+            'total_pages': math.ceil(total_items / page_size) if total_items > 0 and page_size > 0 else 0,
             'current_page': page,
             'page_size': page_size,
-            'has_next': page < math.ceil(total_items / page_size) if total_items > 0 else False,
+            'has_next': page < math.ceil(total_items / page_size) if total_items > 0 and page_size > 0 else False,
             'has_previous': page > 1
         }
         return data, pagination_info
@@ -213,6 +237,9 @@ class MobileEcommerceApiController(http.Controller):
                 # Split by comma and convert to integers
                 category_ids = [int(cat_id) for cat_id in category_param.split(',') if cat_id.strip()]
             
+            # Get search term parameter, if provided
+            search_term = request.params.get('search', None)
+            
             user_info = SocialMediaAuth.user_auth(self)
             if user_info['status'] == 'error':
                 return Response(
@@ -232,7 +259,8 @@ class MobileEcommerceApiController(http.Controller):
                 partner_id, 
                 page, 
                 page_size, 
-                category_ids
+                category_ids,
+                search_term
             )
 
             order_lines = request.env['sale.order.line'].sudo().search([
@@ -293,7 +321,10 @@ class MobileEcommerceApiController(http.Controller):
             response_data = {
                 'status': 'success',
                 'message': 'Prodotti recuperati con successo',
-                'info': f'Products retrieved successfully' + (f' for categories {category_param}' if category_param else f' from page {page}'),
+                'info': f'Products retrieved successfully' + 
+                    (f' for categories {category_param}' if category_param else '') +
+                    (f' matching search: {search_term}' if search_term else '') +
+                    (f' from page {page}' if not search_term else ''),
                 'pagination': pagination_info,
                 'total_products': len(product_list),
                 'products': product_list
@@ -316,7 +347,7 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
-              
+             
     @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_product_image(self, product_id, image):
         try:

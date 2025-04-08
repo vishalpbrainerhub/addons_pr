@@ -23,6 +23,7 @@ def get_product_price_from_platform(pricelist_id, product_id, qty, partner_id=Fa
     username = os.environ["ISA_ODOO_USERNAME"]
     password = os.environ["ISA_ODOO_PASSWORD"]
     
+    print(f"Connecting to Odoo at {url} with DB {db} and user {username}")
     try:
         # Initialize XML-RPC connections
         common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")

@@ -18,10 +18,14 @@ def get_product_price_from_platform(pricelist_id, product_id, qty, partner_id=Fa
         float: Product price or None if unable to retrieve
     """
     # Get credentials from environment variables
-    url = os.environ["ISA_ODOO_URL"]
-    db = os.environ["ISA_ODOO_DB"]
-    username = os.environ["ISA_ODOO_USERNAME"]
-    password = os.environ["ISA_ODOO_PASSWORD"]
+    # url = os.environ["ISA_ODOO_URL"]
+    # db = os.environ["ISA_ODOO_DB"]
+    # username = os.environ["ISA_ODOO_USERNAME"]
+    # password = os.environ["ISA_ODOO_PASSWORD"]
+    url = "https://isa-primapaint-staging.odoo.com"
+    db = "odoo-isa-isa-odoo-primapaint-14-0-staging-19484011"
+    username = "connectorantea"
+    password = "connectorantea"
     
     print(f"Connecting to Odoo at {url} with DB {db} and user {username}")
     try:

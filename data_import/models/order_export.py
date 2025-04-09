@@ -106,7 +106,7 @@ class OrderExportCron(models.Model):
                     partner_shipping_id = order.partner_shipping_id.id if order.partner_shipping_id else ''
 
                     # Special handling for customer ID 11956 - force the correct invoice address
-                    if order.partner_id.id == 11956:
+                    if partner_external_id == 11956:
                         # Force the correct invoice address ID
                         partner_invoice_id = 11957
                         # Also update shipping address if it was using the wrong ID

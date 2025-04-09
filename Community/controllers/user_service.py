@@ -90,7 +90,18 @@ class Users(http.Controller):
             
             
             if device_token:
-                # Create or update notification record
+                notification_access = request.env['notification.status'].sudo().search([
+                    ('partner_id', '=', customer.id)
+                ], limit=1)
+                
+                if not notification_access:
+                    request.env['notification.status'].sudo().create({
+                        'partner_id': customer.id,
+                        'community': True,
+                        'promo': True,
+                        'order': True
+                    })
+                
                 notification_record = request.env['customer.notification'].sudo().search([
                     ('partner_id', '=', customer.id)
                 ], limit=1)

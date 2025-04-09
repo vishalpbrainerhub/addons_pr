@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import xmlrpc.client
+import sys
 import os
 
-def get_product_price_from_platform(pricelist_id, product_id, qty, partner_id=False):
+def get_product_details(pricelist_id, product_id, qty, partner_id=False):
     """
     Get product price from Odoo based on pricelist, product, quantity and customer.
     
@@ -15,20 +16,20 @@ def get_product_price_from_platform(pricelist_id, product_id, qty, partner_id=Fa
         partner_id (int, optional): ID of the partner (customer). Defaults to False.
     
     Returns:
-        float: Product price or None if unable to retrieve
+        float or None: Product price or None if price couldn't be retrieved
     """
-    # Get credentials from environment variables
-    # url = os.environ["ISA_ODOO_URL"]
-    # db = os.environ["ISA_ODOO_DB"]
-    # username = os.environ["ISA_ODOO_USERNAME"]
-    # password = os.environ["ISA_ODOO_PASSWORD"]
-    url = "https://isa-primapaint-staging.odoo.com"
-    db = "odoo-isa-isa-odoo-primapaint-14-0-staging-19484011"
-    username = "connectorantea"
-    password = "connectorantea"
-    
-    print(f"Connecting to Odoo at {url} with DB {db} and user {username}")
     try:
+        url = os.environ.get("ISA_ODOO_URL", "https://isa-primapaint-staging.odoo.com")
+        db = os.environ.get("ISA_ODOO_DB", "odoo-isa-isa-odoo-primapaint-14-0-staging-19484011")
+        username = os.environ.get("ISA_ODOO_USERNAME", "connectorantea")
+        password = os.environ.get("ISA_ODOO_PASSWORD", "connectorantea")
+        
+        # Ensure all IDs are integers
+        pricelist_id = int(pricelist_id)
+        product_id = int(product_id)
+        if partner_id:
+            partner_id = int(partner_id)
+        
         # Initialize XML-RPC connections
         common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
         models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")
@@ -36,45 +37,75 @@ def get_product_price_from_platform(pricelist_id, product_id, qty, partner_id=Fa
         # Authenticate
         uid = common.authenticate(db, username, password, {})
         if not uid:
+            print("Authentication failed. Please check your credentials.")
             return None
         
-        # Set up context with pricelist and quantity
+        # Get price directly using product.product and context
         product_context = {
             'pricelist': pricelist_id,
-            'quantity': float(qty)  # Ensure quantity is passed as float
+            'quantity': float(qty)  # Ensure quantity is float
         }
         
-        # Add partner to context if provided
         if partner_id:
             product_context['partner'] = partner_id
         
-        # Direct approach - get price with all context applied
+        # Use a list with a single integer for product_id
         product_data = models.execute_kw(
             db, uid, password,
             'product.product', 
             'read',
-            [product_id], 
-            {'fields': ['price'], 'context': product_context}
+            [[product_id]],  # Note the double brackets to ensure it's a list of ids
+            {'fields': ['price', 'lst_price'], 'context': product_context}
         )
         
-        # Extract price if available
-        if product_data and len(product_data) > 0 and 'price' in product_data[0]:
-            return product_data[0]['price']
+        price = None
         
-        # Fallback - use price calculation API directly
-        products_qty_partner = [(product_id, float(qty), partner_id or False)]
+        if product_data and len(product_data) > 0:
+            # 'price' field contains the computed price with all rules applied
+            if 'price' in product_data[0]:
+                price = product_data[0]['price']
+            elif 'lst_price' in product_data[0]:
+                price = product_data[0]['lst_price']
         
-        result = models.execute_kw(
-            db, uid, password,
-            'product.pricelist', 
-            '_compute_price_rule',
-            [pricelist_id, products_qty_partner]
-        )
+        # If we couldn't get the price through the first method, try alternative
+        if price is None:
+            # Try to call _compute_price_rule directly
+            try:
+                # Create the arguments needed - using proper tuple format
+                products_qty_partner = [(product_id, float(qty), partner_id or False)]
+                
+                # Call _compute_price_rule directly with proper list format
+                result = models.execute_kw(
+                    db, uid, password,
+                    'product.pricelist', 
+                    '_compute_price_rule',
+                    [[pricelist_id], products_qty_partner]  # Note the double brackets for pricelist_id
+                )
+                
+                # Result should be a dictionary where key is product_id and value is (price, rule_id)
+                if result and product_id in result:
+                    price = result[product_id][0]  # Return just the price
+            except Exception as internal_error:
+                print(f"Alternative method error: {internal_error}")
         
-        if result and product_id in result:
-            return result[product_id][0]
-            
-        return None
+        # If we still don't have the price, get it separately
+        if price is None:
+            try:
+                product_info = models.execute_kw(
+                    db, uid, password,
+                    'product.product',
+                    'search_read',
+                    [[['id', '=', product_id]]],
+                    {'fields': ['list_price']}
+                )
+                
+                if product_info and len(product_info) > 0 and 'list_price' in product_info[0]:
+                    price = product_info[0]['list_price']
+            except Exception as info_error:
+                print(f"Product info retrieval error: {info_error}")
+        
+        return price
         
     except Exception as e:
+        print(f"Error: {e}")
         return None

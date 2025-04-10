@@ -5,7 +5,6 @@ from datetime import datetime
 from .user_authentication import SocialMediaAuth
 from .notification_service import CustomerController
 from .helper_functions import ProductPriceController
-from .test import get_batch_product_details, get_product_details
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -112,7 +111,6 @@ class Ecommerce_orders(http.Controller):
     @http.route('/api/orders/<int:order_id>', auth='public', type='http', methods=['GET'])
     def get_order_single(self, order_id):
         try:
-            print("order id ",order_id)
             user = SocialMediaAuth.user_auth(self)
             if user['status'] == 'error':
                 return Response(json.dumps({
@@ -266,11 +264,11 @@ class Ecommerce_orders(http.Controller):
     @http.route('/api/confirm_order', auth='public', type='json', methods=['POST'])
     def confirm_order(self, **post):
         try:
-            user_info = SocialMediaAuth.user_auth(self)
-            if user_info['status'] == 'error':
-                return {'status': 'error', 'message': user_info['message'], 'info': 'Authentication failed.'}
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
 
-            partner_id = user_info['user_id']
+            partner_id = user['user_id']
             order_id = request.jsonrequest.get('order_id')
 
             if not order_id:
@@ -292,68 +290,25 @@ class Ecommerce_orders(http.Controller):
                     'info': 'The order contains no products.'}, 400
 
             # Get partner's pricelist
-            cr = request.env.cr
-            cr.execute("""
-                SELECT 
-                    rp.id as partner_id,
-                    rp.name as partner_name,
-                    pp.id as pricelist_id,
-                    pp.name as pricelist_name
-                FROM res_partner rp
-                LEFT JOIN ir_property ip ON ip.res_id = CONCAT('res.partner,', rp.id)
-                LEFT JOIN product_pricelist pp ON pp.id = CAST(SUBSTRING(ip.value_reference FROM 'product.pricelist,(.*)') AS INTEGER)
-                WHERE ip.name = 'property_product_pricelist'
-                AND rp.id = %s
-            """, (partner_id,))
+            partner = request.env['res.partner'].sudo().browse(partner_id)
+            price_list = partner.property_product_pricelist
             
-            pricelist_info = cr.fetchone()
-            if not pricelist_info or not pricelist_info[2]:
+            if not price_list:
                 return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
                     'info': 'Price list not found.'}, 400
-            
-            pricelist_id = pricelist_info[2]
 
-            # Prepare batch price requests for all order lines
-            batch_price_requests = []
-            
+
+            # Update prices based on pricelist before confirming
             for line in order_line:
                 product_product = request.env['product.product'].sudo().browse(line.product_id.id)
                 product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                
-                # Get external_id for the product
-                external_id = product_tmpl.external_id if hasattr(product_tmpl, 'external_id') else product_tmpl.id
-                
-                batch_price_requests.append({
-                    'product_id': external_id,
-                    'qty': line.product_uom_qty,
-                    'line_id': line.id
-                })
-            
-            # Get all prices in batch
-            from .test import get_batch_product_details, get_product_details
-            all_prices = get_batch_product_details(pricelist_id, batch_price_requests, partner_id)
-            
-            # Update prices for all order lines
-            for req in batch_price_requests:
-                line_id = req['line_id']
-                external_id = req['product_id']
-                quantity = req['qty']
-                
-                # Get price from batch results or fall back to individual call if missing
-                price = all_prices.get(int(external_id), 
-                                    get_product_details(pricelist_id, external_id, quantity, partner_id))
-                
+                # price = ProductPriceController.calculate_price_product(
+                #     product_tmpl.id, 
+                #     line.product_uom_qty,
+                #     partner_id
+                # )
+                price = product_tmpl.external_basic_price 
                 if price:
-                    line = request.env['sale.order.line'].sudo().browse(line_id)
-                    
-                    # Apply discount if applicable
-                    product_product = request.env['product.product'].sudo().browse(line.product_id.id)
-                    product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                    product_discount = getattr(product_tmpl, 'discount', 0.0)
-                    
-                    if product_discount:
-                        price = price * (1 - (product_discount / 100))
-                    
                     line.sudo().write({'price_unit': price})
 
             # Confirm order
@@ -449,17 +404,17 @@ class Ecommerce_orders(http.Controller):
                         'filter': 'order'
                     })
 
-            return {
-                'status': 'success',
-                'message': 'Ordine inserito con successo e carrello svuotato.',
-                'info': 'Order placed successfully and cart emptied.',
-                'order_id': order.id,
-                'order_state': order.state,
-                'order_amount_total': order.amount_total,
-                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
-                'partner_address': shipping_address,
-                'reward_points_earned': total_points if total_points > 0 else 0
-            }
+                return {
+                    'status': 'success',
+                    'message': 'Ordine inserito con successo e carrello svuotato.',
+                    'info': 'Order placed successfully and cart emptied.',
+                    'order_id': order.id,
+                    'order_state': order.state,
+                    'order_amount_total': order.amount_total,
+                    'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                    'partner_address': shipping_address,
+                    'reward_points_earned': total_points if total_points > 0 else 0
+                }
 
         except Exception as e:
             return {'status': 'error', 'message': 'Si è verificato un errore durante la conferma dell\'ordine.',
@@ -469,11 +424,11 @@ class Ecommerce_orders(http.Controller):
     @http.route('/api/reorder', auth='public', type='json', methods=['POST'])
     def reorder(self):
         try:
-            user_info = SocialMediaAuth.user_auth(self)
-            if user_info['status'] == 'error':
-                return {'status': 'error', 'message': user_info['message'], 'info': 'Authentication failed.'}
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
 
-            partner_id = user_info['user_id']
+            partner_id = user['user_id']
             order_id = request.jsonrequest.get('order_id')
 
             order = request.env['sale.order'].sudo().search([
@@ -488,50 +443,20 @@ class Ecommerce_orders(http.Controller):
 
             new_order = order.sudo().copy()
             
+            # Get partner's pricelist
+            partner = request.env['res.partner'].sudo().browse(partner_id)
+            price_list = partner.property_product_pricelist
             
-            
-            pricelist_id = order.pricelist_id.id
-            # Prepare batch price requests for all order lines
-            batch_price_requests = []
-            
+            if not price_list:
+                return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
+                    'info': 'Price list not found.'}, 400
+
+            # Update prices based on current pricelist
             for line in new_order.order_line:
                 product_product = request.env['product.product'].sudo().browse(line.product_id.id)
                 product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                
-                # Get external_id for the product
-                external_id = product_tmpl.external_id if hasattr(product_tmpl, 'external_id') else product_tmpl.id
-                
-                batch_price_requests.append({
-                    'product_id': external_id,
-                    'qty': line.product_uom_qty,
-                    'line_id': line.id
-                })
-            
-            # Get all prices in batch
-            from .test import get_batch_product_details, get_product_details
-            all_prices = get_batch_product_details(pricelist_id, batch_price_requests, partner_id)
-            
-            # Update prices for all order lines
-            for req in batch_price_requests:
-                line_id = req['line_id']
-                external_id = req['product_id']
-                quantity = req['qty']
-                
-                # Get price from batch results or fall back to individual call if missing
-                price = all_prices.get(int(external_id), 
-                                    get_product_details(pricelist_id, external_id, quantity, partner_id))
-                
+                price = product_tmpl.external_basic_price
                 if price:
-                    line = request.env['sale.order.line'].sudo().browse(line_id)
-                    
-                    # Apply discount if applicable
-                    product_product = request.env['product.product'].sudo().browse(line.product_id.id)
-                    product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                    product_discount = getattr(product_tmpl, 'discount', 0.0)
-                    
-                    if product_discount:
-                        price = price * (1 - (product_discount / 100))
-                    
                     line.sudo().write({'price_unit': price})
 
             new_order.sudo().action_confirm()

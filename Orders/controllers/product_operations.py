@@ -631,22 +631,26 @@ class MobileEcommerceApiController(http.Controller):
                 # find the product id in pricelist items for price based on customer pricelist
                 
                 if quantity > 0:
+                    # Get partner's pricelist using direct SQL query
                     
-                    # new_line = env.sudo().create({
-                    #     'order_id': sale_order.id,
-                    #     'product_id': product.id,
-                    #     'product_uom_qty': quantity,
-                    #     'price_unit': product.list_price,
-                    # })
+                    partner_pricelist = request.env['res.partner'].sudo().browse(partner_id).property_product_pricelist
+                    pricelist_id = partner_pricelist.id
                     
-                    final_price = ProductPriceController.calculate_price_product(product.id, quantity, partner_id)
+                    external_id = test_product.external_import_id if hasattr(test_product, 'external_import_id') else test_product.id
+                    
+                    price = get_product_details(pricelist_id, external_id, quantity, partner_id)
+                    
+                    # Apply discount if applicable
+                    product_discount = getattr(test_product, 'discount', 0.0)
+                    if product_discount:
+                        price = price * (1 - (product_discount / 100))
                     
                     new_line = env.sudo().create({
-                                            'order_id': sale_order.id,
-                                            'product_id': product.id,
-                                            'product_uom_qty': quantity,
-                                            'price_unit': final_price,
-                                        })
+                        'order_id': sale_order.id,
+                        'product_id': product.id,
+                        'product_uom_qty': quantity,
+                        'price_unit': price,
+                    })
 
                     return {
                         'status': 'success',

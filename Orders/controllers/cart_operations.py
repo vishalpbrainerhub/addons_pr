@@ -28,31 +28,14 @@ class EcommerceCartLine(http.Controller):
                 }), content_type='application/json', status=401, headers={'Access-Control-Allow-Origin': '*'})
 
             partner_id = user_info['user_id']
-            
-            # Get pricelist for the partner
-            cr = request.env.cr
-            cr.execute("""
-                SELECT 
-                    rp.id as partner_id,
-                    rp.name as partner_name,
-                    pp.id as pricelist_id,
-                    pp.name as pricelist_name
-                FROM res_partner rp
-                LEFT JOIN ir_property ip ON ip.res_id = CONCAT('res.partner,', rp.id)
-                LEFT JOIN product_pricelist pp ON pp.id = CAST(SUBSTRING(ip.value_reference FROM 'product.pricelist,(.*)') AS INTEGER)
-                WHERE ip.name = 'property_product_pricelist'
-                AND rp.id = %s
-            """, (partner_id,))
-            
-            pricelist_info = cr.fetchone()
-            if not pricelist_info or not pricelist_info[2]:
+                
+            pricelist_id = request.env['res.partner'].sudo().browse(partner_id).property_product_pricelist.id
+            if not pricelist_id:
                 return Response(json.dumps({
                     'status': 'error',
-                    'message': 'Nessun listino prezzi trovato per il cliente',
-                    'info': 'No pricelist found for the customer'
-                }), content_type='application/json', status=400, headers={'Access-Control-Allow-Origin': '*'})
-                
-            pricelist_id = pricelist_info[2]
+                    'message': 'Nessun listino trovato per questo partner.',
+                    'info': 'No pricelist found for this partner.'
+                }), content_type='application/json', status=404, headers={'Access-Control-Allow-Origin': '*'})
 
             # Get active cart lines
             cart_lines = request.env['sale.order.line'].sudo().search_read([

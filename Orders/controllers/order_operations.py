@@ -5,6 +5,7 @@ from datetime import datetime
 from .user_authentication import SocialMediaAuth
 from .notification_service import CustomerController
 from .helper_functions import ProductPriceController
+from .test import get_batch_product_details, get_product_details
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ class Ecommerce_orders(http.Controller):
     @http.route('/api/orders/<int:order_id>', auth='public', type='http', methods=['GET'])
     def get_order_single(self, order_id):
         try:
+            print("order id ",order_id)
             user = SocialMediaAuth.user_auth(self)
             if user['status'] == 'error':
                 return Response(json.dumps({
@@ -264,11 +266,11 @@ class Ecommerce_orders(http.Controller):
     @http.route('/api/confirm_order', auth='public', type='json', methods=['POST'])
     def confirm_order(self, **post):
         try:
-            user = SocialMediaAuth.user_auth(self)
-            if user['status'] == 'error':
-                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
+            user_info = SocialMediaAuth.user_auth(self)
+            if user_info['status'] == 'error':
+                return {'status': 'error', 'message': user_info['message'], 'info': 'Authentication failed.'}
 
-            partner_id = user['user_id']
+            partner_id = user_info['user_id']
             order_id = request.jsonrequest.get('order_id')
 
             if not order_id:
@@ -290,170 +292,174 @@ class Ecommerce_orders(http.Controller):
                     'info': 'The order contains no products.'}, 400
 
             # Get partner's pricelist
-            partner = request.env['res.partner'].sudo().browse(partner_id)
-            price_list = partner.property_product_pricelist
+            cr = request.env.cr
+            cr.execute("""
+                SELECT 
+                    rp.id as partner_id,
+                    rp.name as partner_name,
+                    pp.id as pricelist_id,
+                    pp.name as pricelist_name
+                FROM res_partner rp
+                LEFT JOIN ir_property ip ON ip.res_id = CONCAT('res.partner,', rp.id)
+                LEFT JOIN product_pricelist pp ON pp.id = CAST(SUBSTRING(ip.value_reference FROM 'product.pricelist,(.*)') AS INTEGER)
+                WHERE ip.name = 'property_product_pricelist'
+                AND rp.id = %s
+            """, (partner_id,))
             
-            if not price_list:
+            pricelist_info = cr.fetchone()
+            if not pricelist_info or not pricelist_info[2]:
                 return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
                     'info': 'Price list not found.'}, 400
+            
+            pricelist_id = pricelist_info[2]
 
-            # Check quantities and collect errors
-            invalid_quantities = []
+            # Prepare batch price requests for all order lines
+            batch_price_requests = []
             
             for line in order_line:
-                # Find matching pricelist items for this product
-                matching_items = price_list.item_ids.filtered(
-                    lambda x: x.product_tmpl_id.id == line.product_id.product_tmpl_id.id 
-                            or x.product_id.id == line.product_id.id
-                )
+                product_product = request.env['product.product'].sudo().browse(line.product_id.id)
+                product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
                 
-                if matching_items:
-                    # Get minimum required quantity (lowest min_quantity from rules)
-                    min_required = min(matching_items.mapped('min_quantity'))
+                # Get external_id for the product
+                external_id = product_tmpl.external_id if hasattr(product_tmpl, 'external_id') else product_tmpl.id
+                
+                batch_price_requests.append({
+                    'product_id': external_id,
+                    'qty': line.product_uom_qty,
+                    'line_id': line.id
+                })
+            
+            # Get all prices in batch
+            from .test import get_batch_product_details, get_product_details
+            all_prices = get_batch_product_details(pricelist_id, batch_price_requests, partner_id)
+            
+            # Update prices for all order lines
+            for req in batch_price_requests:
+                line_id = req['line_id']
+                external_id = req['product_id']
+                quantity = req['qty']
+                
+                # Get price from batch results or fall back to individual call if missing
+                price = all_prices.get(int(external_id), 
+                                    get_product_details(pricelist_id, external_id, quantity, partner_id))
+                
+                if price:
+                    line = request.env['sale.order.line'].sudo().browse(line_id)
                     
-                    if line.product_uom_qty < min_required:
-                        invalid_quantities.append({
-                            'product_name': line.product_id.name,
-                            'current_quantity': line.product_uom_qty,
-                            'min_required': min_required
-                        })
-
-            # If there are invalid quantities, return error
-            if invalid_quantities:
-                # return {
-                #     'status': 'error',
-                #     'message': f'Quantità minima non raggiunta per alcuni prodotti. Minimo {min_required} richiesto.',
-                #     'info': f'Minimum quantity not met for some products. Minimum {min_required} required.',
-                #     'invalid_items': invalid_quantities
-                # }, 400
-                
-    
-                product_quantity_dict = {item['product_name']: item['min_required'] for item in invalid_quantities}
-                return {
-                    'status': 'error',
-                    'message': f'Quantità minima non raggiunta per alcuni prodotti',
-                    'info': f'Minimum quantity not met for some products',
-                    'invalid_items': invalid_quantities,
-                    'data': [product_quantity_dict]
-                }, 400
-            else:
-
-                # Update prices based on pricelist before confirming
-                for line in order_line:
+                    # Apply discount if applicable
                     product_product = request.env['product.product'].sudo().browse(line.product_id.id)
                     product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                    price = ProductPriceController.calculate_price_product(
-                        product_tmpl.id, 
-                        line.product_uom_qty,
-                        partner_id
-                    )
-                    if price:
-                        line.sudo().write({'price_unit': price})
+                    product_discount = getattr(product_tmpl, 'discount', 0.0)
+                    
+                    if product_discount:
+                        price = price * (1 - (product_discount / 100))
+                    
+                    line.sudo().write({'price_unit': price})
 
-                # Confirm order
-                order.sudo().action_confirm()
+            # Confirm order
+            order.sudo().action_confirm()
 
-                # Handle rewards points
-                total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
-                if total_points > 0:
-                    request.env['rewards.points'].sudo().create({
+            # Handle rewards points
+            total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
+            if total_points > 0:
+                request.env['rewards.points'].sudo().create({
+                    'user_id': partner_id,
+                    'order_id': order.id,
+                    'points': total_points,
+                    'status': 'gain'
+                })
+
+                total_points_obj = request.env['rewards.totalpoints'].sudo().search([
+                    ('user_id', '=', partner_id)
+                ], limit=1)
+                
+                if total_points_obj:
+                    total_points_obj.sudo().write({
+                        'total_points': total_points_obj.total_points + total_points
+                    })
+                else:
+                    request.env['rewards.totalpoints'].sudo().create({
                         'user_id': partner_id,
-                        'order_id': order.id,
-                        'points': total_points,
-                        'status': 'gain'
+                        'total_points': total_points
                     })
 
-                    total_points_obj = request.env['rewards.totalpoints'].sudo().search([
-                        ('user_id', '=', partner_id)
-                    ], limit=1)
-                    
-                    if total_points_obj:
-                        total_points_obj.sudo().write({
-                            'total_points': total_points_obj.total_points + total_points
-                        })
-                    else:
-                        request.env['rewards.totalpoints'].sudo().create({
-                            'user_id': partner_id,
-                            'total_points': total_points
-                        })
+            # Get shipping address
+            user_address = request.env['social_media.custom_address'].sudo().search([
+                ('id', '=', order.shipping_address_id)
+            ])
 
-                # Get shipping address
-                user_address = request.env['social_media.custom_address'].sudo().search([
-                    ('id', '=', order.shipping_address_id)
-                ])
+            shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
 
-                shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
-
-                # Send confirmation email
-                template = request.env['mail.template'].sudo().create({
-                    'name': 'Conferma Ordine',
-                    'email_from': 'admin@primapaint.com',
-                    'email_to': f"{order.partner_id.email}, staff@primapaint.it",
-                    'subject': f'Ordine #{order.name} Confermato',
-                    'body_html': f'''
-                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                            <h2 style="color: #2C3E50;">Conferma Ordine</h2>
-                            
-                            <p>Caro/a {order.partner_id.name},</p>
-                            
-                            <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
-                            
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                                <p><strong>Numero Ordine:</strong> {order.name}</p>
-                                <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
-                                <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
-                            </div>
-
-                            <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
-                            <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
-                                {order.partner_shipping_id.street or ''}<br>
-                                {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
-                                {order.partner_shipping_id.country_id.name or ''}
-                            </p>
-
-                            <p style="color: #666; margin-top: 30px; font-size: 12px;">
-                                Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
-                            </p>
-                        </div>
-                    ''',
-                    'model_id': request.env['ir.model']._get('sale.order').id,
-                    'auto_delete': True
-                })
-                template.send_mail(order.id, force_send=True)
-
-                # Handle notifications
-                filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-                if filter_notification.order:
-                    customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-                    device_token = customer.onesignal_player_id       
-                    if device_token:
-                        notification_service.send_onesignal_notification(
-                            device_token,
-                            'Ordine inserito con successo',
-                            'Ordine inserito',
-                            {'type': 'order_placed'}
-                        )
+            # Send confirmation email
+            template = request.env['mail.template'].sudo().create({
+                'name': 'Conferma Ordine',
+                'email_from': 'admin@primapaint.com',
+                'email_to': f"{order.partner_id.email}, staff@primapaint.it",
+                'subject': f'Ordine #{order.name} Confermato',
+                'body_html': f'''
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #2C3E50;">Conferma Ordine</h2>
                         
-                        request.env['notification.storage'].sudo().create({
-                            'message': 'Ordine inserito con successo',
-                            'patner_id': partner_id,
-                            'title': 'Ordine inserito',
-                            'data': {'type': 'order_placed'},
-                            'include_player_ids': device_token,
-                            'filter': 'order'
-                        })
+                        <p>Caro/a {order.partner_id.name},</p>
+                        
+                        <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                            <p><strong>Numero Ordine:</strong> {order.name}</p>
+                            <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                            <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                        </div>
 
-                return {
-                    'status': 'success',
-                    'message': 'Ordine inserito con successo e carrello svuotato.',
-                    'info': 'Order placed successfully and cart emptied.',
-                    'order_id': order.id,
-                    'order_state': order.state,
-                    'order_amount_total': order.amount_total,
-                    'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
-                    'partner_address': shipping_address,
-                    'reward_points_earned': total_points if total_points > 0 else 0
-                }
+                        <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
+                        <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                            {order.partner_shipping_id.street or ''}<br>
+                            {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
+                            {order.partner_shipping_id.country_id.name or ''}
+                        </p>
+
+                        <p style="color: #666; margin-top: 30px; font-size: 12px;">
+                            Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
+                        </p>
+                    </div>
+                ''',
+                'model_id': request.env['ir.model']._get('sale.order').id,
+                'auto_delete': True
+            })
+            template.send_mail(order.id, force_send=True)
+
+            # Handle notifications
+            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+            if filter_notification.order:
+                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                device_token = customer.onesignal_player_id       
+                if device_token:
+                    notification_service.send_onesignal_notification(
+                        device_token,
+                        'Ordine inserito con successo',
+                        'Ordine inserito',
+                        {'type': 'order_placed'}
+                    )
+                    
+                    request.env['notification.storage'].sudo().create({
+                        'message': 'Ordine inserito con successo',
+                        'patner_id': partner_id,
+                        'title': 'Ordine inserito',
+                        'data': {'type': 'order_placed'},
+                        'include_player_ids': device_token,
+                        'filter': 'order'
+                    })
+
+            return {
+                'status': 'success',
+                'message': 'Ordine inserito con successo e carrello svuotato.',
+                'info': 'Order placed successfully and cart emptied.',
+                'order_id': order.id,
+                'order_state': order.state,
+                'order_amount_total': order.amount_total,
+                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                'partner_address': shipping_address,
+                'reward_points_earned': total_points if total_points > 0 else 0
+            }
 
         except Exception as e:
             return {'status': 'error', 'message': 'Si è verificato un errore durante la conferma dell\'ordine.',

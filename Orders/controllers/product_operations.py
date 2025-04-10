@@ -8,6 +8,7 @@ import math
 from .helper_functions import ProductPriceController
 import os
 import base64
+from .test import get_batch_product_details, get_product_details
 
 
 class MobileEcommerceApiController(http.Controller):    
@@ -211,7 +212,7 @@ class MobileEcommerceApiController(http.Controller):
             'has_next': page < math.ceil(total_items / page_size) if total_items > 0 and page_size > 0 else False,
             'has_previous': page > 1
         }
-        return data, pagination_info
+        return data, pagination_info, pricelist_id
 
     @http.route('/api/products', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_products(self):
@@ -255,7 +256,7 @@ class MobileEcommerceApiController(http.Controller):
 
             partner_id = user_info['user_id']
             
-            products_data, pagination_info = self.get_product_list_price(
+            products_data, pagination_info, pricelist_id = self.get_product_list_price(
                 partner_id, 
                 page, 
                 page_size, 
@@ -268,31 +269,61 @@ class MobileEcommerceApiController(http.Controller):
                 ('order_id.state', '=', 'draft')
             ])
 
-            cart_lines_map = []
+            cart_lines_map = {}
             for line in order_lines:
-                dict = {}
-                dict['product_id'] = line.product_id.id
-                dict['cart_line_id'] = line.id
-                dict['product_uom_qty'] = line.product_uom_qty
-                cart_lines_map.append(dict)
+                cart_lines_map[line.product_id.id] = {
+                    'cart_line_id': line.id,
+                    'product_uom_qty': line.product_uom_qty
+                }
 
-            product_list = []
+            # Prepare batch price requests
+            batch_price_requests = []
             
             for product in products_data:
                 product_template = request.env['product.product'].sudo().search([('product_tmpl_id', '=', product['id'])])
-                cart_line = None
-                for line in cart_lines_map:
-                    if line['product_id'] == product['id'] or line['product_id'] == product_template.id:
-                        cart_line = line
-                        break
                 
-                quantity = cart_line['product_uom_qty'] if cart_line else 0
-                cart_line_id = cart_line['cart_line_id'] if cart_line else None
+                # Try to find product in cart
+                quantity = 0
+                cart_line_id = None
                 
+                if product['id'] in cart_lines_map:
+                    quantity = cart_lines_map[product['id']]['product_uom_qty']
+                    cart_line_id = cart_lines_map[product['id']]['cart_line_id']
+                elif product_template and product_template.id in cart_lines_map:
+                    quantity = cart_lines_map[product_template.id]['product_uom_qty']
+                    cart_line_id = cart_lines_map[product_template.id]['cart_line_id']
                 
-                final_price = ProductPriceController.calculate_price_product(product["id"], quantity, partner_id)
+                # Add to batch request
+                batch_price_requests.append({
+                    'product_id': product['external_id'],
+                    'qty': quantity,
+                    'original_data': {
+                        'product': product,
+                        'quantity': quantity,
+                        'cart_line_id': cart_line_id
+                    }
+                })
+            
+            # Get all prices in batch
+            all_prices = get_batch_product_details(pricelist_id, batch_price_requests, partner_id)
+            
+            # Process results
+            product_list = []
+            
+            for req in batch_price_requests:
+                product = req['original_data']['product']
+                quantity = req['original_data']['quantity']
+                cart_line_id = req['original_data']['cart_line_id']
+                
+                # Get price from batch results, or fallback to individual call if missing
+                final_price = all_prices.get(product['external_id'], 
+                                            get_product_details(pricelist_id, product['external_id'], 
+                                                                quantity, partner_id))
+                
+                # Apply discount if needed
                 if product['discount']:
                     final_price = final_price * (1 - (product['discount'] / 100))
+                    final_price = round(final_price, 2)
                 
                 pr_id = product['id']
                 
@@ -321,10 +352,7 @@ class MobileEcommerceApiController(http.Controller):
             response_data = {
                 'status': 'success',
                 'message': 'Prodotti recuperati con successo',
-                'info': f'Products retrieved successfully' + 
-                    (f' for categories {category_param}' if category_param else '') +
-                    (f' matching search: {search_term}' if search_term else '') +
-                    (f' from page {page}' if not search_term else ''),
+                'info': f'Products retrieved successfully' + (f' for categories {category_param}' if category_param else f' from page {page}'),
                 'pagination': pagination_info,
                 'total_products': len(product_list),
                 'products': product_list

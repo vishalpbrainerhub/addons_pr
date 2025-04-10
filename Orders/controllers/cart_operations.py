@@ -2,66 +2,139 @@ from odoo import http
 from odoo.http import request, Response
 import json
 from .user_authentication import SocialMediaAuth
-from .helper_functions import ProductPriceController
+from .test import get_batch_product_details, get_product_details
 
 
 class EcommerceCartLine(http.Controller):
-
-
-        
     
-    @http.route('/api/cart_line', auth='public', type='http', methods=['GET'], csrf=False, cors='*')
+    @http.route('/api/cart_line', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_cart_line(self):
+        if request.httprequest.method == 'OPTIONS':
+            headers = {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS', 
+                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+                'Access-Control-Max-Age': '86400',
+            }
+            return Response(status=204, headers=headers)
+            
         try:
-            user = SocialMediaAuth.user_auth(self)
-            if user['status'] == 'error':
+            user_info = SocialMediaAuth.user_auth(self)
+            if user_info['status'] == 'error':
                 return Response(json.dumps({
                     'status': 'error',
-                    'message': user['message'],
-                    'info': 'Authentication failed.'
+                    'message': 'Autenticazione fallita',
+                    'info': user_info['message']
                 }), content_type='application/json', status=401, headers={'Access-Control-Allow-Origin': '*'})
 
-            partner_id = user['user_id']
+            partner_id = user_info['user_id']
+            
+            # Get pricelist for the partner
+            cr = request.env.cr
+            cr.execute("""
+                SELECT 
+                    rp.id as partner_id,
+                    rp.name as partner_name,
+                    pp.id as pricelist_id,
+                    pp.name as pricelist_name
+                FROM res_partner rp
+                LEFT JOIN ir_property ip ON ip.res_id = CONCAT('res.partner,', rp.id)
+                LEFT JOIN product_pricelist pp ON pp.id = CAST(SUBSTRING(ip.value_reference FROM 'product.pricelist,(.*)') AS INTEGER)
+                WHERE ip.name = 'property_product_pricelist'
+                AND rp.id = %s
+            """, (partner_id,))
+            
+            pricelist_info = cr.fetchone()
+            if not pricelist_info or not pricelist_info[2]:
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Nessun listino prezzi trovato per il cliente',
+                    'info': 'No pricelist found for the customer'
+                }), content_type='application/json', status=400, headers={'Access-Control-Allow-Origin': '*'})
+                
+            pricelist_id = pricelist_info[2]
 
+            # Get active cart lines
             cart_lines = request.env['sale.order.line'].sudo().search_read([
                 ('order_id.partner_id', '=', partner_id),
                 ('order_id.state', '=', 'draft')
             ], ['product_id', 'price_unit', 'product_uom_qty', 'order_id'])
 
-            cart = []
+            # Prepare batch price requests
+            batch_price_requests = []
+            product_map = {}
+            
             for line in cart_lines:
-                
-                if line['product_uom_qty'] > 0:
-                    
-                    product_product = request.env['product.product'].sudo().browse(line['product_id'][0])
-                    product = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                    print(product.id)
-                    
-                    price = ProductPriceController.calculate_price_product(product.id, line['product_uom_qty'], partner_id)
-
-                    product_discount = getattr(product, 'discount', 0.0)
-                    price = price - (price * product_discount / 100)
-                    test = {
-                        'id': line['id'],
-                        'product_id': product.id,
-                        'name': product.name,
-                        'list_price': price*line['product_uom_qty'],
-                        'quantity': line['product_uom_qty'],
-                        'image': f'/web/image/product.template/{product.id}/image_1920' if product.image_1920 else None,
-                        'barcode': product.barcode,
-                        'active': product.active,
-                        'color': getattr(product, 'color', None),
-                        'base_price': price,
-                        'discount': getattr(product, 'discount', 0.0),
-                        'order_id': line['order_id'][0],
-                        'code': getattr(product, 'default_code', None)
-                    }
-                    cart.append(test)
-                else:
+                if line['product_uom_qty'] <= 0:
+                    # Remove lines with zero quantity
                     request.env['sale.order.line'].sudo().browse(line['id']).unlink()
+                    continue
+                    
+                product_product = request.env['product.product'].sudo().browse(line['product_id'][0])
+                product = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
+                
+                # Get external_id for the product
+                external_id = product.external_id if hasattr(product, 'external_id') else product.id
+                
+                product_map[str(external_id)] = {
+                    'line_id': line['id'],
+                    'product': product,
+                    'product_id': product.id,
+                    'quantity': line['product_uom_qty'],
+                    'order_id': line['order_id'][0]
+                }
+                
+                batch_price_requests.append({
+                    'product_id': external_id,
+                    'qty': line['product_uom_qty']
+                })
+            
+            # Get all prices in batch
+            all_prices = get_batch_product_details(pricelist_id, batch_price_requests, partner_id)
+            
+            # Process results
+            cart = []
+            
+            for product_ext_id, product_info in product_map.items():
+                product = product_info['product']
+                quantity = product_info['quantity']
+                
+                # Get price from batch results, or fallback to individual call if missing
+                final_price = all_prices.get(int(product_ext_id), 
+                                          get_product_details(pricelist_id, product_ext_id, 
+                                                             quantity, partner_id))
+                
+                # Apply discount if needed
+                product_discount = getattr(product, 'discount', 0.0)
+                if product_discount:
+                    final_price = final_price * (1 - (product_discount / 100))
+                    final_price = round(final_price, 2)
+                
+                cart_item = {
+                    'id': product_info['line_id'],
+                    'product_id': product.id,
+                    'name': product.name,
+                    'list_price': final_price * quantity,
+                    'quantity': quantity,
+                    'image': f'/web/image/product.template/{product.id}/image_1920' if product.image_1920 else None,
+                    'barcode': product.barcode,
+                    'active': product.active,
+                    'color': getattr(product, 'color', None),
+                    'base_price': final_price,
+                    'discount': product_discount,
+                    'order_id': product_info['order_id'],
+                    'code': getattr(product, 'default_code', None),
+                    'external_id': external_id
+                }
+                cart.append(cart_item)
+            
+            # Calculate cart totals
+            total_price = sum(item['list_price'] for item in cart)
             
             response_data = {
                 'cart': cart,
+                'total_items': len(cart),
+                'total_price': total_price,
                 'status': 'success',
                 'message': 'Dettagli del carrello recuperati con successo.',
                 'info': 'Cart details retrieved successfully.'
@@ -75,6 +148,8 @@ class EcommerceCartLine(http.Controller):
                 'message': 'Si è verificato un errore nel recupero dei dettagli del carrello.',
                 'info': str(e)
             }), content_type='application/json', status=500, headers={'Access-Control-Allow-Origin': '*'})
+            
+            
         
     @http.route('/api/cart_line', auth='public', type='json', methods=['POST'], csrf=False, cors='*')
     def create_cart_line(self):

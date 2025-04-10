@@ -1,6 +1,5 @@
 from odoo import http, fields
 from odoo.http import request, Response
-from odoo.osv import expression
 import json
 from .user_authentication import SocialMediaAuth
 import random
@@ -8,12 +7,11 @@ import math
 from .helper_functions import ProductPriceController
 import os
 import base64
-from .test import get_batch_product_details, get_product_details
-
+from .test import get_product_details
 
 class MobileEcommerceApiController(http.Controller):    
     
-    def get_product_list_price(self, partner_id, page=1, page_size=20, category_ids=None, search_term=None):
+    def get_product_list_price(self, partner_id, page=1, page_size=20, category_ids=None):
         """
         Get paginated product list with prices
         
@@ -22,7 +20,6 @@ class MobileEcommerceApiController(http.Controller):
             page: Page number (default: 1)
             page_size: Number of items per page (default: 20)
             category_ids: List of category IDs to filter by (optional)
-            search_term: Search term to filter products by code or name (optional)
         """
         cr = request.env.cr
         env = request.env
@@ -51,8 +48,8 @@ class MobileEcommerceApiController(http.Controller):
             # Get all pricelist items first to calculate total
             all_pricelist_items = pricelist.item_ids
             
-            # If we're filtering by category or search term, don't apply pagination initially
-            if category_ids or search_term:
+            # If we're filtering by category, don't apply pagination
+            if category_ids:
                 pricelist_items = all_pricelist_items
             else:
                 total_items = len(all_pricelist_items)
@@ -74,17 +71,9 @@ class MobileEcommerceApiController(http.Controller):
                     if category_ids:
                         domain.append(('categ_id', 'in', category_ids))
 
-                    # Add search term filter if specified
-                    if search_term:
-                        search_domain = ['|',
-                            ('name', 'ilike', search_term),
-                            ('default_code', 'ilike', search_term)
-                        ]
-                        domain = expression.AND([domain, search_domain])
-
                     product_info = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score' ,'categ_id', 'code_','image_1920','default_code','external_id'
+                        'is_published', 'rewards_score' ,'categ_id', 'code_','image_1920','default_code','external_id','external_basic_price'
                     ])
                     
                     # Skip if no product found
@@ -113,7 +102,8 @@ class MobileEcommerceApiController(http.Controller):
                         'min_quantity': [{"min_quantity": item.min_quantity, "price": price}],
                         'category_id': product_info[0]['categ_id'][0],
                         'image_1920': product_info[0]['image_1920'] or '',
-                        'external_id': product_info[0]['external_id']
+                        'external_id': product_info[0]['external_id'],
+                        'external_basic_price': product_info[0]['external_basic_price']
                     }
                     if item.product_tmpl_id.id not in [p['id'] for p in data]:
                         data.append(product_dict)
@@ -138,17 +128,9 @@ class MobileEcommerceApiController(http.Controller):
                     if category_ids:
                         domain = [('categ_id', 'in', category_ids)]
                     
-                    # Add search term filter if specified
-                    if search_term:
-                        search_domain = ['|',
-                            ('name', 'ilike', search_term),
-                            ('default_code', 'ilike', search_term)
-                        ]
-                        domain = expression.AND([domain, search_domain])
-                    
                     products_in_category = env['product.template'].sudo().search_read(domain, [
                         'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                        'is_published', 'rewards_score', 'code_', 'categ_id','image_1920','default_code','external_id'
+                        'is_published', 'rewards_score', 'code_', 'categ_id','image_1920','default_code','external_id','external_basic_price'
                     ])
                     
                     # Process each product in the category
@@ -160,7 +142,8 @@ class MobileEcommerceApiController(http.Controller):
                             price = item.fixed_price
                         elif item.compute_price == 'formula':
                             price = product_info['list_price'] * (1 - (item.price_discount / 100))
-                            
+                        
+
                         # FIX: Initialize min_quantity as a list instead of an integer
                         product_dict = {
                             'name': product_info['name'],
@@ -176,7 +159,8 @@ class MobileEcommerceApiController(http.Controller):
                             'min_quantity': [],  # Changed from 0 to an empty list
                             'category_id': product_info['categ_id'][0],
                             'image_1920': product_info['image_1920'] or '',
-                            'external_id': product_info['external_id']
+                            'external_id': product_info['external_id'],
+                            'external_basic_price': product_info['external_basic_price']
                         }
                         if product_info['id'] not in [p['id'] for p in data]:
                             data.append(product_dict)
@@ -194,22 +178,16 @@ class MobileEcommerceApiController(http.Controller):
                     print("Global Price:", item.fixed_price)
             print("Count:", count)
             
-        # If we're filtering by category or search term, calculate total_items after filtering
-        if category_ids or search_term:
+            # If we're filtering by category, calculate total_items after filtering
+        if category_ids:
             total_items = len(data)
-        
-        # Apply pagination to the filtered data if search term is provided
-        if search_term and page_size > 0:
-            start_idx = (page - 1) * page_size
-            end_idx = start_idx + page_size
-            data = data[start_idx:end_idx]
         
         pagination_info = {
             'total_items': total_items,
-            'total_pages': math.ceil(total_items / page_size) if total_items > 0 and page_size > 0 else 0,
+            'total_pages': math.ceil(total_items / page_size) if total_items > 0 else 0,
             'current_page': page,
             'page_size': page_size,
-            'has_next': page < math.ceil(total_items / page_size) if total_items > 0 and page_size > 0 else False,
+            'has_next': page < math.ceil(total_items / page_size) if total_items > 0 else False,
             'has_previous': page > 1
         }
         return data, pagination_info, pricelist_id
@@ -238,9 +216,6 @@ class MobileEcommerceApiController(http.Controller):
                 # Split by comma and convert to integers
                 category_ids = [int(cat_id) for cat_id in category_param.split(',') if cat_id.strip()]
             
-            # Get search term parameter, if provided
-            search_term = request.params.get('search', None)
-            
             user_info = SocialMediaAuth.user_auth(self)
             if user_info['status'] == 'error':
                 return Response(
@@ -260,8 +235,7 @@ class MobileEcommerceApiController(http.Controller):
                 partner_id, 
                 page, 
                 page_size, 
-                category_ids,
-                search_term
+                category_ids
             )
 
             order_lines = request.env['sale.order.line'].sudo().search([
@@ -269,58 +243,31 @@ class MobileEcommerceApiController(http.Controller):
                 ('order_id.state', '=', 'draft')
             ])
 
-            cart_lines_map = {}
+            cart_lines_map = []
             for line in order_lines:
-                cart_lines_map[line.product_id.id] = {
-                    'cart_line_id': line.id,
-                    'product_uom_qty': line.product_uom_qty
-                }
+                dict = {}
+                dict['product_id'] = line.product_id.id
+                dict['cart_line_id'] = line.id
+                dict['product_uom_qty'] = line.product_uom_qty
+                cart_lines_map.append(dict)
 
-            # Prepare batch price requests
-            batch_price_requests = []
+            product_list = []
             
             for product in products_data:
                 product_template = request.env['product.product'].sudo().search([('product_tmpl_id', '=', product['id'])])
+                cart_line = None
+                for line in cart_lines_map:
+                    if line['product_id'] == product['id'] or line['product_id'] == product_template.id:
+                        cart_line = line
+                        break
                 
-                # Try to find product in cart
-                quantity = 0
-                cart_line_id = None
-                
-                if product['id'] in cart_lines_map:
-                    quantity = cart_lines_map[product['id']]['product_uom_qty']
-                    cart_line_id = cart_lines_map[product['id']]['cart_line_id']
-                elif product_template and product_template.id in cart_lines_map:
-                    quantity = cart_lines_map[product_template.id]['product_uom_qty']
-                    cart_line_id = cart_lines_map[product_template.id]['cart_line_id']
-                
-                # Add to batch request
-                batch_price_requests.append({
-                    'product_id': product['external_id'],
-                    'qty': quantity,
-                    'original_data': {
-                        'product': product,
-                        'quantity': quantity,
-                        'cart_line_id': cart_line_id
-                    }
-                })
+                quantity = cart_line['product_uom_qty'] if cart_line else 0
+                cart_line_id = cart_line['cart_line_id'] if cart_line else None
             
-            # Get all prices in batch
-            all_prices = get_batch_product_details(pricelist_id, batch_price_requests, partner_id)
-            
-            # Process results
-            product_list = []
-            
-            for req in batch_price_requests:
-                product = req['original_data']['product']
-                quantity = req['original_data']['quantity']
-                cart_line_id = req['original_data']['cart_line_id']
+
+                # test_price = get_product_details(pricelist_id,int(product['external_id']),quantity,partner_id)
                 
-                # Get price from batch results, or fallback to individual call if missing
-                final_price = all_prices.get(product['external_id'], 
-                                            get_product_details(pricelist_id, product['external_id'], 
-                                                                quantity, partner_id))
-                
-                # Apply discount if needed
+                final_price = product['external_basic_price']
                 if product['discount']:
                     final_price = final_price * (1 - (product['discount'] / 100))
                     final_price = round(final_price, 2)
@@ -375,7 +322,7 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
-             
+              
     @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_product_image(self, product_id, image):
         try:
@@ -631,26 +578,27 @@ class MobileEcommerceApiController(http.Controller):
                 # find the product id in pricelist items for price based on customer pricelist
                 
                 if quantity > 0:
-                    # Get partner's pricelist using direct SQL query
                     
-                    partner_pricelist = request.env['res.partner'].sudo().browse(partner_id).property_product_pricelist
-                    pricelist_id = partner_pricelist.id
+                    # new_line = env.sudo().create({
+                    #     'order_id': sale_order.id,
+                    #     'product_id': product.id,
+                    #     'product_uom_qty': quantity,
+                    #     'price_unit': product.list_price,
+                    # })
                     
-                    external_id = test_product.external_import_id if hasattr(test_product, 'external_import_id') else test_product.id
+                    # final_price = ProductPriceController.calculate_price_product(product.id, quantity, partner_id)
+                    final_price = test_product.external_basic_price
+                    if test_product.discount:
+                        final_price = final_price * (1 - (test_product.discount / 100))
+                        final_price = round(final_price, 2)
                     
-                    price = get_product_details(pricelist_id, external_id, quantity, partner_id)
-                    
-                    # Apply discount if applicable
-                    product_discount = getattr(test_product, 'discount', 0.0)
-                    if product_discount:
-                        price = price * (1 - (product_discount / 100))
                     
                     new_line = env.sudo().create({
-                        'order_id': sale_order.id,
-                        'product_id': product.id,
-                        'product_uom_qty': quantity,
-                        'price_unit': price,
-                    })
+                                            'order_id': sale_order.id,
+                                            'product_id': product.id,
+                                            'product_uom_qty': quantity,
+                                            'price_unit': final_price,
+                                        })
 
                     return {
                         'status': 'success',

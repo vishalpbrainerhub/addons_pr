@@ -25,6 +25,7 @@
         'data/customer_import.xml',
         'data/order_status.xml',
         'data/order_export.xml',
+        'data/price_import.xml',
     ],
     'installable': True,
     'application': True,

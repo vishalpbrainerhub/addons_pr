@@ -20,6 +20,7 @@ class ProductTemplate(models.Model):
     code_ = fields.Char(string='Code', required=True)
     is_published = fields.Boolean(string='Is Published', default=True, help='Determines if product is visible in store')
     external_import_id = fields.Integer(string='External Import ID', help='External ID for product import')
+    external_basic_price = fields.Float(string='External Basic Price', help='Basic price in external system')
     
 class ProductProduct(models.Model):
     _inherit = 'product.product'

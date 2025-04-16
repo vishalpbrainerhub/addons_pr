@@ -20,10 +20,10 @@ class DataImporter(models.TransientModel):
             _logger.info("Starting XMLRPC price import...")
             
             # Get credentials from environment variables
-            url = os.environ.get("ISA_ODOO_URL", "https://isa-primapaint-staging.odoo.com")
-            db = os.environ.get("ISA_ODOO_DB", "odoo-isa-isa-odoo-primapaint-14-0-staging-19484011")
-            username = os.environ.get("ISA_ODOO_USERNAME", "connectorantea")
-            password = os.environ.get("ISA_ODOO_PASSWORD", "connectorantea")
+            url = os.environ.get("ISA_ODOO_URL", "")
+            db = os.environ.get("ISA_ODOO_DB", "")
+            username = os.environ.get("ISA_ODOO_USERNAME", "")
+            password = os.environ.get("ISA_ODOO_PASSWORD", "")
             
             # Initialize XML-RPC connections
             common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")

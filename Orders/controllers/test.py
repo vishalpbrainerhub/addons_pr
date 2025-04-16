@@ -12,10 +12,7 @@ def get_batch_product_details():
 def get_product_details():
     return 10
 
-# url = os.environ.get("ISA_ODOO_URL", "https://isa-primapaint-staging.odoo.com")
-#         db = os.environ.get("ISA_ODOO_DB", "odoo-isa-isa-odoo-primapaint-14-0-staging-19484011")
-#         username = os.environ.get("ISA_ODOO_USERNAME", "connectorantea")
-#         password = os.environ.get("ISA_ODOO_PASSWORD", "connectorantea")
+
 
 
 #!/usr/bin/env python3
@@ -43,10 +40,10 @@ def get_product_details( pricelist_id, product_id, qty, partner_id=False):
         tuple: (price, name, default_code) - Product price, name and default code
     """
     try:
-        url = os.environ.get("ISA_ODOO_URL", "https://isa-primapaint-staging.odoo.com")
-        db = os.environ.get("ISA_ODOO_DB", "odoo-isa-isa-odoo-primapaint-14-0-staging-19484011")
-        username = os.environ.get("ISA_ODOO_USERNAME", "connectorantea")
-        password = os.environ.get("ISA_ODOO_PASSWORD", "connectorantea")
+        url = os.environ.get("ISA_ODOO_URL", "")
+        db = os.environ.get("ISA_ODOO_DB", "")
+        username = os.environ.get("ISA_ODOO_USERNAME", "")
+        password = os.environ.get("ISA_ODOO_PASSWORD", "")
         # Initialize XML-RPC connections
         common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
         models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")

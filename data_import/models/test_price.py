@@ -25,6 +25,8 @@ class DataImporter(models.TransientModel):
             username = os.environ.get("ISA_ODOO_USERNAME", "")
             password = os.environ.get("ISA_ODOO_PASSWORD", "")
             
+            _logger.info(f"Connecting to: {url}, Database: {db}, Username: {username}")
+
             # Initialize XML-RPC connections
             common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common")
             models = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/object")

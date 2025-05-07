@@ -144,12 +144,32 @@ class UsersAuthApi(http.Controller):
                     'info': 'No address found for this customer'
                 }), content_type='application/json', status=404)
 
+            # Get raw data
             customer_address_data = customer_address.read(['address', 'continued_address', 'city', 'postal_code', 'village', 'default', 'state_id', 'country_id'])
+            
+            # Process each address to convert False/None values to empty strings
+            processed_addresses = []
+            for address in customer_address_data:
+                processed_address = {}
+                for key, value in address.items():
+                    # Handle special case for state_id and country_id which are tuples
+                    if key in ['state_id', 'country_id']:
+                        if not value:
+                            processed_address[key] = False
+                        else:
+                            processed_address[key] = value
+                    # Handle all other fields
+                    else:
+                        processed_address[key] = value if value not in (False, None, "False") else ""
+                
+                processed_addresses.append(processed_address)
 
-            return Response(json.dumps({"result":{
-                'status': 'success',
-                'address': customer_address_data
-            }}), content_type='application/json')
+            return Response(json.dumps({
+                "result": {
+                    'status': 'success',
+                    'address': processed_addresses
+                }
+            }), content_type='application/json')
 
         except Exception as e:
             _logger.error('Error retrieving customer address: %s', str(e))
@@ -589,8 +609,8 @@ class UsersAuthApi(http.Controller):
     #             'message': 'Errore durante il recupero dei dettagli dell\'utente',
     #             'info': str(e)
     #         }), content_type='application/json', status=500)
+    
             
-
     @http.route('/user/agency', type='http', auth='public', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def agency_details(self):
         if request.httprequest.method == 'OPTIONS':
@@ -624,7 +644,7 @@ class UsersAuthApi(http.Controller):
             }), content_type='application/json', status=404)
             
         try:
-            company_id = customer.company_id.id
+            company_id = customer.company_id.id if customer.company_id else False
             if not company_id:
                 return Response(json.dumps({
                     'status': 'error',
@@ -635,7 +655,7 @@ class UsersAuthApi(http.Controller):
             company = request.env['res.company'].sudo().search([
                 ('id', '=', company_id)
             ], limit=1)
-            customer_data = {}
+            
             if not company:
                 return Response(json.dumps({
                     'status': 'error',
@@ -643,26 +663,68 @@ class UsersAuthApi(http.Controller):
                     'info': 'Agency not found'
                 }), content_type='application/json', status=404)
                 
+            # Initialize customer_data dictionary with default empty strings
+            customer_data = {
+                'name': '',
+                'address': '',
+                'email': '',
+                'username': '',
+                'phone': '',
+                'vat': '',
+                'website': '',
+                'tax_code': 'Vat 22%', 
+                'pa_index': 'RE-125986'
+            }
             
+            # Get company name
             company_data = company.read(['name'])[0]
-            customer_data['name'] = company_data['name'] or ''
+            customer_data['name'] = company_data.get('name') or ''
             
-            customer_address = request.env['social_media.custom_address'].search([('partner_id', '=', customer_id), ('default', '=', True)])
-
+            # Get customer address (safely)
+            customer_address = request.env['social_media.custom_address'].search([
+                ('partner_id', '=', customer_id), 
+                ('default', '=', True)
+            ], limit=1)
             
-            customer_data['address'] = f'{customer_address.address} {customer_address.city} {customer_address.postal_code}, {customer_address.state_id.name}, {customer_address.country_id.name}' or ''
+            # Safely build address string
+            if customer_address:
+                address_parts = []
+                
+                # Add address parts only if they exist
+                address = customer_address.address or ''
+                if address:
+                    address_parts.append(address)
+                    
+                city = customer_address.city or ''
+                if city and city != 'False':
+                    address_parts.append(city)
+                    
+                postal_code = customer_address.postal_code or ''
+                if postal_code and postal_code != 'False':
+                    address_parts.append(postal_code)
+                    
+                state_name = customer_address.state_id.name if customer_address.state_id else ''
+                if state_name:
+                    address_parts.append(state_name)
+                    
+                country_name = customer_address.country_id.name if customer_address.country_id else ''
+                if country_name:
+                    address_parts.append(country_name)
+                    
+                # Join all parts with appropriate separators
+                customer_data['address'] = ' '.join(address_parts)
             
+            # Get customer info
             customer_info = request.env['res.partner'].sudo().search([
                 ('id', '=', customer_id)
             ], limit=1)
-            customer_data['email'] = customer_info.email or ''
-            customer_data['username'] = customer_info.name or ''
-            customer_data['phone'] = customer_info.phone or ''
-            customer_data['vat'] = customer_info.vat or ''
-            customer_data['website'] = customer_info.website or ''
-            customer_data['tax_code'] = 'Vat 22%' 
-            customer_data['pa_index'] = 'RE-125986'
             
+            if customer_info:
+                customer_data['email'] = customer_info.email or ''
+                customer_data['username'] = customer_info.name or ''
+                customer_data['phone'] = customer_info.phone or ''
+                customer_data['vat'] = customer_info.vat or ''
+                customer_data['website'] = customer_info.website or ''
 
             return Response(json.dumps({
                 'status': 'success',

@@ -102,17 +102,12 @@ class OrderExportCron(models.Model):
                     external_pricelist_id = pricelist_dict.external_id
 
                     # Get the correct invoice ID for partner 11956
-                    partner_invoice_id = order.partner_invoice_id.id if order.partner_invoice_id else ''
-                    partner_shipping_id = order.partner_shipping_id.id if order.partner_shipping_id else ''
-
-                    # Special handling for customer ID 11956 - force the correct invoice address
-                    if partner_external_id == 11956:
-                        # Force the correct invoice address ID
-                        partner_invoice_id = 11957
-                        # Also update shipping address if it was using the wrong ID
-                        if partner_shipping_id == 15451:
-                            partner_shipping_id = 11957
-
+                    # partner_invoice_id = order.partner_invoice_id.id if order.partner_invoice_id else ''
+                    # partner_shipping_id = order.partner_shipping_id.id if order.partner_shipping_id else ''
+                    
+                    
+                    partner_invoice_id = ''
+                    partner_shipping_id = ''
                     base_row = {
                         'order_number': order.id,
                         'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else '',

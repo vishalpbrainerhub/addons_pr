@@ -114,7 +114,7 @@ class OrderExportCron(models.Model):
                         'partner_id': partner_external_id,  # Use the external ID instead of internal ID
                         'company_id': order.company_id.id if order.company_id else '',
                         'partner_invoice_id': partner_external_id,
-                        'partner_shipping_id': partner_shipping_id,
+                        'partner_shipping_id': partner_external_id,
                         # 'pricelist_id': order.pricelist_id.id if order.pricelist_id else ''
                         'pricelist_id': external_pricelist_id
                     }

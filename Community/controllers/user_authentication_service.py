@@ -678,7 +678,9 @@ class UsersAuthApi(http.Controller):
             
             # Get company name
             company_data = company.read(['name'])[0]
-            customer_data['name'] = company_data.get('name') or ''
+            # customer_data['name'] = company_data.get('name') or ''
+            customer_data['name'] = customer.name or ''
+            customer_data['company_name'] = company_data.get('name') or ''
             
             # Get customer address (safely)
             customer_address = request.env['social_media.custom_address'].search([

@@ -31,8 +31,8 @@ class MobileEcommerceApiController(http.Controller):
         
         # Create base domain for products
         domain = [
-            ('sale_ok', '=', True),
-            ('is_published', '=', True)
+            # ('sale_ok', '=', True),
+            # ('is_published', '=', True)
         ]
         
         # Add category filter if specified

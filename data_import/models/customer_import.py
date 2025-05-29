@@ -9,13 +9,7 @@ import os
 
 _logger = logging.getLogger(__name__)
 
-class Partner_External_import_id(models.Model):
-    _name = 'external.import'
-    _description = 'External Import ID'
-    
-    partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
-    external_import_id = fields.Integer(string='External Import ID', required=True)
-    
+
 class DataImporter(models.TransientModel):
     # _name = 'data.importer'
     _inherit = 'data.importer'
@@ -65,7 +59,7 @@ class DataImporter(models.TransientModel):
     def import_cutomers(self):
         try:
             _logger.info("Starting customer import process...")
-            file_path = os.environ.get('CUSTOMER_DATA_PATH')
+            file_path = os.environ.get('LOCAL_CUSTOMER_DATA_PATH')
             with open(file_path, 'r', encoding='utf-8') as file:
                 reader = csv.DictReader(file)
                 records = [row for row in reader if row.get('id')]
@@ -73,8 +67,14 @@ class DataImporter(models.TransientModel):
                 for row in records:
                     try:
                         customer_id = row['id']
+                        customer_email = row.get('email', '').strip()
                         price_list = ast.literal_eval(row['property_product_pricelist'])
                         category_id = int(price_list[0]) if isinstance(price_list, tuple) else int(ast.literal_eval(price_list)[0])
+                        
+                        # Skip if no email provided
+                        if not customer_email:
+                            _logger.warning(f"Skipping customer {row.get('name', 'Unknown')} - no email provided")
+                            continue
                         
                         # Check if customer already exists based on external import ID
                         existing_import = self.env['external.import'].search([('external_import_id', '=', customer_id)], limit=1)
@@ -85,15 +85,25 @@ class DataImporter(models.TransientModel):
                             _logger.error(f"Pricelist not found for category_id: {category_id}")
                             continue
                         
+                        existing_customer = None
+                        
                         if existing_import:
-                            # Update existing customer
+                            # Update existing customer found by external import ID
                             existing_customer = existing_import.partner_id
-                            _logger.info(f"Updating existing customer {existing_customer.name} (ID: {customer_id})")
-                            
-                            # Update customer information
+                            _logger.info(f"Found customer by external ID - Updating {existing_customer.name} (ID: {customer_id})")
+                        else:
+                            # Check if customer exists by email
+                            existing_customer = self.env['res.partner'].search([('email', '=', customer_email)], limit=1)
+                            if existing_customer:
+                                _logger.info(f"Found customer by email - Updating {existing_customer.name} (Email: {customer_email})")
+                                
+                        
+                        if existing_customer:
+                            continue
+                            # Update existing customer information
                             existing_customer.write({
                                 'name': row['name'],
-                                'email': row['email'],
+                                'email': customer_email,
                                 'street': row['street'],
                                 'city': row['city'],
                                 'zip': row['zip'],
@@ -130,10 +140,10 @@ class DataImporter(models.TransientModel):
                                 })
                                 
                         else:
-                            # Create new customer
+                            # Create new customer - no existing record found by ID or email
                             customer = self.env['res.partner'].create({
                                 'name': row['name'],
-                                'email': row['email'],
+                                'email': customer_email,
                                 'street': row['street'],
                                 'city': row['city'],
                                 'zip': row['zip'],

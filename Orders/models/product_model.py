@@ -84,3 +84,9 @@ class OrderSale(models.Model):
         default='draft',
         help='Stores the state of the order in external system'
     )
+    agent_attach = fields.Boolean(
+        string='Agent Attached Order',
+        default=False,
+        help='Indicates whether a agent placed the order or not'
+    )
+    order_agent_id = fields.Integer(string='Order Agent Id')

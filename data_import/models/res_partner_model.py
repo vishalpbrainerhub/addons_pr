@@ -1,5 +1,3 @@
-
-
 from odoo import models, fields, api
 
 
@@ -11,7 +9,9 @@ class Partner_External_import_id(models.Model):
     
     partner_id = fields.Many2one('res.partner', string='Customer', required=True, ondelete='cascade')
     external_import_id = fields.Integer(string='External Import ID', required=True)
-    
+    is_agent = fields.Boolean(string='Is Agent', default=False, help='True if this record represents a sales agent')
+    agent_id = fields.Integer(string='Agent External Import ID')
+    l10n_it_codice_fiscale = fields.Char("l10n_it_codice_fiscale", required=False, default='')
 
 
     

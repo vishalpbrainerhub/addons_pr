@@ -26,6 +26,8 @@
         'data/order_status.xml',
         'data/order_export.xml',
         'data/price_import.xml',
+        'data/agent_import.xml',
+        'data/agent_customer_sales_import.xml'
     ],
     'installable': True,
     'application': True,

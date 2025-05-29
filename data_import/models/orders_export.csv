@@ -1,2 +1,0 @@
-order_number,date_order,partner_id,company_id,partner_invoice_id,partner_shipping_id,pricelist_id,order_line/product_id,order_line/product_uom_qty,order_line/price_unit
-66,2025-03-24 12:52:32,7648,1,7648,7648,5,1667,100.0,100.0

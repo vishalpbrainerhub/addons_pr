@@ -79,7 +79,8 @@ class DataImporter(models.TransientModel):
                     if matching_product:
                         # Update external basic price
                         matching_product.write({
-                            'external_basic_price': price
+                            'external_basic_price': price,
+                             'list_price': price
                         })
                         updated_products += 1
                         _logger.debug(f"Updated product: {matching_product.display_name} with price: {price}")

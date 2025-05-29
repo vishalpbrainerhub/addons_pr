@@ -2,8 +2,6 @@ from odoo import http
 from odoo.http import request, Response
 import json
 from .user_authentication import SocialMediaAuth
-from .test import get_batch_product_details, get_product_details
-
 
 class EcommerceCartLine(http.Controller):
     
@@ -19,8 +17,13 @@ class EcommerceCartLine(http.Controller):
                 }), content_type='application/json', status=401, headers={'Access-Control-Allow-Origin': '*'})
 
             partner_id = user['user_id']
+            env = request.env
+            
+            # Get user's pricelist
+            partner = env['res.partner'].sudo().browse(partner_id)
+            pricelist = partner.property_product_pricelist or env['product.pricelist'].sudo().search([('name', '=', 'Public Pricelist')], limit=1)
 
-            cart_lines = request.env['sale.order.line'].sudo().search_read([
+            cart_lines = env['sale.order.line'].sudo().search_read([
                 ('order_id.partner_id', '=', partner_id),
                 ('order_id.state', '=', 'draft')
             ], ['product_id', 'price_unit', 'product_uom_qty', 'order_id'])
@@ -30,31 +33,40 @@ class EcommerceCartLine(http.Controller):
                 
                 if line['product_uom_qty'] > 0:
                     
-                    product_product = request.env['product.product'].sudo().browse(line['product_id'][0])
-                    product = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
+                    product_product = env['product.product'].sudo().browse(line['product_id'][0])
+                    product = env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
                     
-                    price = product.external_basic_price 
-
+                    # Get pricelist price based on quantity
+                    quantity = line['product_uom_qty']
+                    pricelist_price = pricelist.get_product_price(product, quantity, partner)
+                    
+                    # Calculate final price (use pricelist price if available, otherwise external_basic_price)
+                    base_price = pricelist_price if pricelist_price > 0 else product.external_basic_price
+                    
+                    # Apply product discount if any
                     product_discount = getattr(product, 'discount', 0.0)
-                    price = price - (price * product_discount / 100)
+                    if product_discount:
+                        base_price = base_price * (1 - (product_discount / 100))
+                        base_price = round(base_price, 2)
+                    
                     test = {
                         'id': line['id'],
                         'product_id': product.id,
                         'name': product.name,
-                        'list_price': price*line['product_uom_qty'],
-                        'quantity': line['product_uom_qty'],
+                        'list_price': base_price * quantity,
+                        'quantity': quantity,
                         'image': f'/web/image/product.template/{product.id}/image_1920' if product.image_1920 else None,
                         'barcode': product.barcode,
                         'active': product.active,
                         'color': getattr(product, 'color', None),
-                        'base_price': price,
-                        'discount': getattr(product, 'discount', 0.0),
+                        'base_price': base_price,
+                        'discount': product_discount,
                         'order_id': line['order_id'][0],
                         'code': getattr(product, 'default_code', None)
                     }
                     cart.append(test)
                 else:
-                    request.env['sale.order.line'].sudo().browse(line['id']).unlink()
+                    env['sale.order.line'].sudo().browse(line['id']).unlink()
             
             response_data = {
                 'cart': cart,
@@ -77,7 +89,7 @@ class EcommerceCartLine(http.Controller):
     def create_cart_line(self):
         """
         description : Create a cart line by adding a product to the authenticated user's current draft order.
-        parameters : product_id (int), quantity (float), product_price (float)
+        parameters : product_id (int), quantity (float), product_price (float) - NOTE: product_price will now be calculated using pricelist
         """
         if request.httprequest.method == 'OPTIONS':
             headers = {
@@ -97,66 +109,62 @@ class EcommerceCartLine(http.Controller):
                     'info': 'Authentication failed.'
                 }, 401
 
-            partner_id = user['user_id']  # This is partner_id from token
+            partner_id = user['user_id']
+            env = request.env
+            
+            # Get user's pricelist
+            partner = env['res.partner'].sudo().browse(partner_id)
+            pricelist = partner.property_product_pricelist or env['product.pricelist'].sudo().search([('name', '=', 'Public Pricelist')], limit=1)
 
             product_id = request.jsonrequest.get('product_id')
             product_uom_qty = request.jsonrequest.get('quantity', False)
-            price_unit = request.jsonrequest.get('product_price', False)
+            # Note: product_price from frontend is now ignored - we calculate based on pricelist
 
-            if not product_id or not product_uom_qty or not price_unit:
+            if not product_id or not product_uom_qty:
                 return {
                     'status': 'error',
-                    'message': 'ID del prodotto, quantità e prezzo sono necessari.',
-                    'info': 'Product ID, quantity, and price are required.'
+                    'message': 'ID del prodotto e quantità sono necessari.',
+                    'info': 'Product ID and quantity are required.'
                 }, 400
 
-            product = request.env['product.template'].sudo().browse(product_id)
+            product = env['product.template'].sudo().browse(product_id)
             if not product.exists():
                 return {
                     'status': 'error',
                     'message': 'Il prodotto specificato non esiste o è stato eliminato.',
                     'info': 'The specified product does not exist or has been deleted.'
                 }, 400
-            # if not product.exists():
-            #     template = request.env['product.template'].sudo().browse(product_id)
-            #     if template.exists():
-            #         product = template.product_variant_ids[0]   
-            #         if not product:
-            #             return {
-            #                 'status': 'error',
-            #                 'message': 'La variante del prodotto specificata non esiste o è stata eliminata.',
-            #                 'info': 'The specified product variant does not exist or has been deleted.'
-            #             }, 400
-            #     else:
-            #         return {
-            #             'status': 'error',
-            #             'message': 'Il prodotto specificato non esiste o è stato eliminato.',
-            #             'info': 'The specified product does not exist or has been deleted.'
-            #         }, 400
 
-            price_unit = price_unit - (price_unit * product.discount / 100)
+            # Calculate price using pricelist logic
+            pricelist_price = pricelist.get_product_price(product, product_uom_qty, partner)
+            price_unit = pricelist_price if pricelist_price > 0 else product.external_basic_price
+            
+            # Apply product discount if any
+            if product.discount:
+                price_unit = price_unit * (1 - (product.discount / 100))
+                price_unit = round(price_unit, 2)
 
-            shipping_address = request.env['social_media.custom_address'].sudo().search([
+            shipping_address = env['social_media.custom_address'].sudo().search([
                 ('partner_id', '=', partner_id), 
                 ("default", "=", True)
             ], limit=1)
 
-            # Check for existing draft order with sudo
-            sale_order = request.env['sale.order'].sudo().search([
+            # Check for existing draft order
+            sale_order = env['sale.order'].sudo().search([
                 ('partner_id', '=', partner_id), 
                 ('state', '=', 'draft')
             ], limit=1)
             
             if not sale_order:
-                # Create new sale order with sudo
-                sale_order = request.env['sale.order'].sudo().with_context(
+                # Create new sale order
+                sale_order = env['sale.order'].sudo().with_context(
                     default_partner_id=partner_id
                 ).create({
                     'partner_id': partner_id,
                     'shipping_address_id': shipping_address.id if shipping_address else False,
                 })
 
-            cart_line_check = request.env['sale.order.line'].sudo().search([
+            cart_line_check = env['sale.order.line'].sudo().search([
                 ('product_id', '=', product.id), 
                 ('order_id', '=', sale_order.id)
             ], limit=1)
@@ -168,7 +176,7 @@ class EcommerceCartLine(http.Controller):
                     'info': 'Product already in cart.'
                 }
 
-            cart_line = request.env['sale.order.line'].sudo().with_context(
+            cart_line = env['sale.order.line'].sudo().with_context(
                 default_order_id=sale_order.id
             ).create({
                 'order_id': sale_order.id,
@@ -219,19 +227,24 @@ class EcommerceCartLine(http.Controller):
                     'info': 'Authentication failed.'
                 }, 401
 
-            partner_id = user['user_id']  
+            partner_id = user['user_id']
+            env = request.env
+            
+            # Get user's pricelist
+            partner = env['res.partner'].sudo().browse(partner_id)
+            pricelist = partner.property_product_pricelist or env['product.pricelist'].sudo().search([('name', '=', 'Public Pricelist')], limit=1)
 
-            sale_order = request.env['sale.order'].sudo().search([
+            sale_order = env['sale.order'].sudo().search([
                 ('partner_id', '=', partner_id),
                 ('state', '=', 'draft')
             ], limit=1)
             
             if not sale_order:
-                sale_order = request.env['sale.order'].sudo().create({
+                sale_order = env['sale.order'].sudo().create({
                     'partner_id': partner_id,
                 })
 
-            cart_line = request.env['sale.order.line'].sudo().browse(id)
+            cart_line = env['sale.order.line'].sudo().browse(id)
             if not cart_line.exists() or cart_line.order_id.partner_id.id != partner_id:
                 return {
                     'status': 'error',
@@ -239,8 +252,22 @@ class EcommerceCartLine(http.Controller):
                     'info': 'Cart line does not exist or does not belong to this customer.'
                 }, 404
 
+            # Get product and recalculate price based on new quantity
+            product_product = env['product.product'].sudo().browse(cart_line.product_id.id)
+            product = env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
+            
+            # Calculate new price using updated quantity
+            pricelist_price = pricelist.get_product_price(product, product_uom_qty, partner)
+            price_unit = pricelist_price if pricelist_price > 0 else product.external_basic_price
+            
+            # Apply product discount if any
+            if product.discount:
+                price_unit = price_unit * (1 - (product.discount / 100))
+                price_unit = round(price_unit, 2)
+
             cart_line.sudo().write({
-                'product_uom_qty': product_uom_qty
+                'product_uom_qty': product_uom_qty,
+                'price_unit': price_unit  # Update price based on new quantity
             })
 
             return {

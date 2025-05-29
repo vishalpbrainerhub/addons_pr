@@ -35,7 +35,6 @@ class Users(http.Controller):
 
             customer = request.env['res.partner'].sudo().search([
                 ('email', '=', email)
-                # ('customer_rank', '>', 0),
             ], limit=1)
             if not customer:
                 return {"status": "error", "info": "Credenziali non valide"}
@@ -74,7 +73,6 @@ class Users(http.Controller):
                 return {"status": "error", "message": "Credenziali inviate via email"}
             
 
-            
             
             # if not password_record.verify_password(password):
             #     print('Password not verified')  
@@ -144,7 +142,6 @@ class Users(http.Controller):
                     _logger.error('Notification error during login: %s', str(notification_error))
                     # Continue with login even if notification fails
             
-            pricelist_name = request.env['res.partner'].sudo().browse(customer.id).property_product_pricelist.name
             default_address = request.env['social_media.custom_address'].sudo().search([
                 ('partner_id', '=', customer.id),
                 ('default', '=', True)
@@ -156,7 +153,12 @@ class Users(http.Controller):
             get_external_id = request.env['external.import'].sudo().search([
                 ('partner_id', '=', customer.id)
             ], limit=1)
-                
+            if get_external_id.is_agent:
+                pricelist_name = ''
+            else:
+                pricelist_name = request.env['res.partner'].sudo().browse(customer.id).property_product_pricelist.name
+            print( get_external_id.external_import_id," get_external_id.external_import_id")
+            print(get_external_id.is_agent,'get_external_id.is_agent')
             return {
                 "status": "success",
                 "message": "Accesso eseguito con successo",
@@ -170,6 +172,7 @@ class Users(http.Controller):
                     'shipping_address':address,
                     'lang': customer.lang or 'en_US',
                     'external_id': get_external_id.external_import_id if get_external_id else customer.id,
+                    'is_agent': get_external_id.is_agent
                 },
                 "token": token if isinstance(token, str) else token.decode('utf-8')
             }

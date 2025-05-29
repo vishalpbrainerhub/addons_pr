@@ -2,10 +2,104 @@ from odoo import http, fields
 from odoo.http import request, Response
 import json
 from .user_authentication import SocialMediaAuth
+import random
 import math
+from .helper_functions import ProductPriceController
 import os
+import base64
+from .test import get_product_details
 
-class MobileEcommerceApiController(http.Controller):
+class MobileEcommerceApiController(http.Controller):    
+    
+    def get_product_list_price(self, partner_id, page=1, page_size=20, category_ids=None, search_term=None):
+        """
+        Get paginated product list with prices
+        
+        Args:
+            partner_id: ID of the partner
+            page: Page number (default: 1)
+            page_size: Number of items per page (default: 20)
+            category_ids: List of category IDs to filter by (optional)
+            search_term: Search term to filter products by name or default_code (optional)
+        """
+        cr = request.env.cr
+        env = request.env
+        
+        
+        data = []
+        total_items = 0
+        
+        # Create base domain for products
+        domain = [
+            # ('sale_ok', '=', True),
+            # ('is_published', '=', True)
+        ]
+        
+        # Add category filter if specified
+        if category_ids:
+            domain.append(('categ_id', 'in', category_ids))
+        
+        # Add search term filter if specified
+        if search_term:
+            domain.append('|')
+            domain.append(('name', 'ilike', search_term))
+            domain.append(('default_code', 'ilike', search_term))
+        
+        # Get all matching product templates
+        product_templates = env['product.template'].sudo().search(domain)
+        total_items = len(product_templates)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
+        # Get paginated items
+        paginated_templates = product_templates[start_idx:end_idx]
+        
+        # Get pricelist_id from result
+        pricelist_id = 5
+        
+        # Fetch product details for each template
+        for template in paginated_templates:
+            product_info = env['product.template'].sudo().search_read([('id', '=', template.id)], [
+                'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
+                'is_published', 'rewards_score', 'categ_id', 'code_', 'image_1920', 
+                'default_code', 'external_id', 'external_basic_price'
+            ])
+            
+            if not product_info:
+                continue
+            
+            product_dict = {
+                'name': product_info[0]['name'],
+                'list_price': product_info[0]['list_price'],
+                'active': product_info[0]['active'],
+                'barcode': product_info[0]['barcode'],
+                'color': product_info[0]['color'],
+                'id': template.id,
+                'discount': product_info[0].get('discount', 0),
+                'is_published': product_info[0].get('is_published', False),
+                'rewards_score': product_info[0].get('rewards_score', 0),
+                'code_': product_info[0].get('default_code', False),
+                'min_quantity': [],  # Initialize as empty list
+                'category_id': product_info[0]['categ_id'][0] if product_info[0].get('categ_id') else False,
+                'image_1920': product_info[0]['image_1920'] or '',
+                'external_id': product_info[0]['external_id'],
+                'external_basic_price': product_info[0]['external_basic_price']
+            }
+            
+            data.append(product_dict)
+        
+        pagination_info = {
+            'total_items': total_items,
+            'total_pages': math.ceil(total_items / page_size) if total_items > 0 else 0,
+            'current_page': page,
+            'page_size': page_size,
+            'has_next': page < math.ceil(total_items / page_size) if total_items > 0 else False,
+            'has_previous': page > 1
+        }
+        
+        return data, pagination_info, pricelist_id
 
     @http.route('/api/products', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
     def get_products(self):
@@ -19,20 +113,21 @@ class MobileEcommerceApiController(http.Controller):
             return Response(status=204, headers=headers)
 
         try:
-            # Get pagination parameters
+            # Get pagination parameters from request
             page = int(request.params.get('page', 1))
             page_size = int(request.params.get('page_size', 20))
             
-            # Get category filter
+            # Get category_id parameter, if provided
             category_param = request.params.get('category_id', None)
             category_ids = None
+            
             if category_param:
+                # Split by comma and convert to integers
                 category_ids = [int(cat_id) for cat_id in category_param.split(',') if cat_id.strip()]
             
-            # Get search parameter
+            # Get search parameter, if provided
             search_term = request.params.get('search', None)
             
-            # Authenticate user
             user_info = SocialMediaAuth.user_auth(self)
             if user_info['status'] == 'error':
                 return Response(
@@ -47,134 +142,72 @@ class MobileEcommerceApiController(http.Controller):
                 )
 
             partner_id = user_info['user_id']
-            env = request.env
             
-            # Get user's pricelist
-            partner = env['res.partner'].sudo().browse(partner_id)
-            pricelist = partner.property_product_pricelist or env['product.pricelist'].sudo().search([('name', '=', 'Public Pricelist')], limit=1)
-            
-            # Build product search domain
-            domain = [('active', '=', True)]
-            
-            # Add category filter
-            if category_ids:
-                domain.append(('categ_id', 'in', category_ids))
-            
-            # Add search filter
-            if search_term:
-                domain.append('|')
-                domain.append(('name', 'ilike', search_term))
-                domain.append(('default_code', 'ilike', search_term))
-            
-            # Get total count for pagination
-            total_items = env['product.template'].sudo().search_count(domain)
-            
-            # Calculate pagination
-            start_idx = (page - 1) * page_size
-            pagination_info = {
-                'total_items': total_items,
-                'total_pages': math.ceil(total_items / page_size) if total_items > 0 else 0,
-                'current_page': page,
-                'page_size': page_size,
-                'has_next': page < math.ceil(total_items / page_size) if total_items > 0 else False,
-                'has_previous': page > 1
-            }
-            
-            # Get paginated products
-            product_templates = env['product.template'].sudo().search(
-                domain, 
-                limit=page_size, 
-                offset=start_idx
+            products_data, pagination_info, pricelist_id = self.get_product_list_price(
+                partner_id, 
+                page, 
+                page_size, 
+                category_ids,
+                search_term
             )
-            
-            # Get cart lines for current user
-            order_lines = env['sale.order.line'].sudo().search([
+
+            order_lines = request.env['sale.order.line'].sudo().search([
                 ('order_id.partner_id', '=', partner_id),
                 ('order_id.state', '=', 'draft')
             ])
-            
+
             cart_lines_map = []
             for line in order_lines:
-                cart_lines_map.append({
-                    'product_id': line.product_id.id,
-                    'cart_line_id': line.id,
-                    'product_uom_qty': line.product_uom_qty
-                })
-            
-            # Build product list
+                dict = {}
+                dict['product_id'] = line.product_id.id
+                dict['cart_line_id'] = line.id
+                dict['product_uom_qty'] = line.product_uom_qty
+                cart_lines_map.append(dict)
+
             product_list = []
-            for template in product_templates:
-                # Get product variants
-                product_variants = env['product.product'].sudo().search([('product_tmpl_id', '=', template.id)])
-                product_variant_id = product_variants[0].id if product_variants else template.id
+            
+            for product in products_data:
+                # Look for a product variant associated with this template
+                product_variants = request.env['product.product'].sudo().search([('product_tmpl_id', '=', product['id'])])
                 
-                # Find cart line
+                # If multiple variants, use the first one
+                product_variant_id = product_variants[0].id if product_variants else product['id']
+                
                 cart_line = None
                 for line in cart_lines_map:
-                    if line['product_id'] == template.id or line['product_id'] == product_variant_id:
+                    if line['product_id'] == product['id'] or line['product_id'] == product_variant_id:
                         cart_line = line
                         break
                 
                 quantity = cart_line['product_uom_qty'] if cart_line else 0
                 cart_line_id = cart_line['cart_line_id'] if cart_line else None
-                
-                # Get pricelist price for this product - Testing different quantities
-                print(f"Product: {template.name} (ID: {template.id})")
-                print(f"Base list_price: {template.list_price}")
-                print(f"External basic price: {template.external_basic_price}")
-                
-                # Test different quantities
-                # test_quantities = [1, 100, 200, 1000, 2000]
-                # for qty in test_quantities:
-                #     pricelist_price_test = pricelist.get_product_price(template, qty, partner)
-                #     print(f"Quantity {qty}: Pricelist Price = {pricelist_price_test}")
-                
-                # print("------------------------------------------\n")
-                
-                # Use quantity 1 for the actual API response
-                pricelist_price = pricelist.get_product_price(template, 1, partner)
-                
-                # Calculate final price (use pricelist price if available, otherwise external_basic_price)
-                final_price = pricelist_price if pricelist_price > 0 else template.external_basic_price
-                if template.discount:
-                    final_price = final_price * (1 - (template.discount / 100))
+            
+                final_price = product['external_basic_price']
+                if product['discount']:
+                    final_price = final_price * (1 - (product['discount'] / 100))
                     final_price = round(final_price, 2)
                 
-                # Get min quantity from pricelist items
-                min_quantity_items = []
-                pricelist_items = env['product.pricelist.item'].sudo().search([
-                    ('pricelist_id', '=', pricelist.id),
-                    '|', 
-                    ('product_tmpl_id', '=', template.id),
-                    ('product_id', 'in', [variant.id for variant in product_variants])
-                ])
-                
-                for item in pricelist_items:
-                    min_quantity_items.append({
-                        'min_quantity': item.min_quantity,
-                        'price': item.fixed_price if item.compute_price == 'fixed' else None,
-                        'discount': item.percent_price if item.compute_price == 'percentage' else None,
-                        'pricelist_item_id': item.id
-                    })
+                pr_id = product['id']
                 
                 product_data = {
-                    'name': template.name,
+                    'name': product['name'],
                     'list_price': final_price,
-                    'active': template.active,
-                    'barcode': template.barcode,
-                    'color': template.color,
-                    'id': template.id,
+                    'active': product['active'], 
+                    'barcode': product['barcode'],
+                    'color': product['color'],
+                    'image': "/web/image?model=res.users&field=avatar_128&id=2",
+                    'id': product['id'],
                     'quantity': quantity,
                     'cart_line_id': cart_line_id,
-                    'discount': template.discount,
-                    'is_published': template.is_published,
-                    'rewards_score': template.rewards_score,
-                    'code': template.default_code if template.default_code else None,
-                    'discounted_price': final_price * quantity,
-                    'min_quantity': min_quantity_items,
-                    'category_id': template.categ_id.id if template.categ_id else False,
-                    'external_id': template.external_id,
-                    'image': f'/web/image/product.template/{template.id}/image_1920' if template.image_1920 else None,
+                    'discount': product["discount"],
+                    'is_published': product["is_published"],
+                    'rewards_score': product["rewards_score"],
+                    'code': product["code_"] if product["code_"] else None,
+                    'discounted_price': final_price*quantity,
+                    'min_quantity': product.get('min_quantity'),
+                    'category_id': product['category_id'],
+                    'external_id': product['external_id'],
+                    'image': f'/web/image/product.template/{pr_id}/image_1920' if product['image_1920'] else None,
                 }
                 product_list.append(product_data)
 
@@ -204,7 +237,7 @@ class MobileEcommerceApiController(http.Controller):
                 status=500,
                 headers={'Access-Control-Allow-Origin': '*'}
             )
-
+    
                
     @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
     def get_product_image(self, product_id, image):

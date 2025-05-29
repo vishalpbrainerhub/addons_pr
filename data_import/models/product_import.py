@@ -135,7 +135,7 @@ class DataImporter(models.TransientModel):
                             'sale_ok': str(row.get('sale_ok', '')).lower() == 'true',
                             'purchase_ok': str(row.get('purchase_ok', '')).lower() == 'true',
                             'external_id': external_product_id,
-                            'image_1920': row.get('image_1920', ''),
+                            # 'image_1920': row.get('image_1920', ''),
                             'code_': random.randint(1000000000000, 9999999999999)
                         }
                         
@@ -182,7 +182,7 @@ class DataImporter(models.TransientModel):
         
     def import_products(self):
         try:
-            file_path = os.environ.get('PRODUCT_DATA_PATH')
+            file_path = os.environ.get('LOCAL_PRODUCT_DATA_PATH')
             
             _logger.info(f"Attempting to open file at: {file_path}")
             

@@ -59,7 +59,7 @@ class DataImporter(models.TransientModel):
     def import_cutomers(self):
         try:
             _logger.info("Starting customer import process...")
-            file_path = os.environ.get('LOCAL_CUSTOMER_DATA_PATH')
+            file_path = os.environ.get('CUSTOMER_DATA_PATH')
             with open(file_path, 'r', encoding='utf-8') as file:
                 reader = csv.DictReader(file)
                 records = [row for row in reader if row.get('id')]

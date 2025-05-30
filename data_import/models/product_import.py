@@ -182,7 +182,7 @@ class DataImporter(models.TransientModel):
         
     def import_products(self):
         try:
-            file_path = os.environ.get('LOCAL_PRODUCT_DATA_PATH')
+            file_path = os.environ.get('PRODUCT_DATA_PATH')
             
             _logger.info(f"Attempting to open file at: {file_path}")
             

@@ -60,7 +60,7 @@ class DataImporter(models.TransientModel):
     def import_agents(self):
         try:
             _logger.info("Starting agent import process...")
-            file_path = os.environ.get('LOCAL_AGENT_DATA_PATH')
+            file_path = os.environ.get('AGENT_DATA_PATH')
             with open(file_path, 'r', encoding='utf-8') as file:
                 reader = csv.DictReader(file)
                 records = [row for row in reader if row.get('id')]

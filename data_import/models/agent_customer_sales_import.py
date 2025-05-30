@@ -15,7 +15,7 @@ class DataImporter(models.TransientModel):
         """Import customer-agent relationships from CSV"""
         try:
             _logger.info("Starting customer-agent relationship import process...")
-            file_path = os.environ.get('LOCAL_AGENT_CUSTOMER_DATA_PATH')
+            file_path = os.environ.get('AGENT_CUSTOMER_DATA_PATH')
             
             if not file_path:
                 _logger.error("LOCAL_AGENT_CUSTOMER_DATA_PATH environment variable not set")

@@ -20,7 +20,7 @@ class DataImporter(models.TransientModel):
         
     def import_pricelist(self):
         try:
-            file_path = os.environ.get('LOCAL_PRICELIST_DATA_PATH')
+            file_path = os.environ.get('PRICELIST_DATA_PATH')
             
             with open(file_path, 'r', encoding='utf-8') as file:
                 content = file.read()

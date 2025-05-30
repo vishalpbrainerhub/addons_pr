@@ -204,21 +204,45 @@ class Ecommerce_orders(http.Controller):
                 return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
 
             partner_id = user['user_id']
-            partner = request.env['res.partner'].sudo().browse(partner_id)
             order_id = request.jsonrequest.get('order_id')
+            agent_attach = request.jsonrequest.get('agent_attach', None)
+            order_agent_id = request.jsonrequest.get('order_agent_id', None)
+            agent_customer_id = request.jsonrequest.get('agent_customer_id', None)
 
             if not order_id:
                 return {'status': 'error', 'message': 'ID dell\'ordine non fornito.', 'info': 'Order ID is required.'}, 400
 
-            order = request.env['sale.order'].sudo().search([
-                ('id', '=', order_id),
-                ('partner_id', '=', partner_id),
-                ('state', '=', 'draft')
-            ], limit=1)
+            # For agent orders, search by order_id only since partner_id will change
+            if agent_attach and agent_customer_id:
+                order = request.env['sale.order'].sudo().search([
+                    ('id', '=', order_id),
+                    ('state', '=', 'draft')
+                ], limit=1)
+            else:
+                order = request.env['sale.order'].sudo().search([
+                    ('id', '=', order_id),
+                    ('partner_id', '=', partner_id),
+                    ('state', '=', 'draft')
+                ], limit=1)
 
             if not order:
                 return {'status': 'error', 'message': 'Ordine non trovato o già confermato.', 
                     'info': 'Order not found or already confirmed.'}, 404
+
+            # Handle agent-placed orders
+            if agent_attach and order_agent_id and agent_customer_id:
+                # Update order with agent information
+                order.sudo().write({
+                    'agent_attach': agent_attach,
+                    'order_agent_id': order_agent_id,
+                    'partner_id': agent_customer_id  # Change order to customer's ID
+                })
+                
+                # Use customer's partner for price calculations and rewards
+                partner_id = agent_customer_id
+                partner = request.env['res.partner'].sudo().browse(partner_id)
+            else:
+                partner = request.env['res.partner'].sudo().browse(partner_id)
 
             order_line = request.env['sale.order.line'].sudo().search([('order_id', '=', order.id)])
             if not order_line:
@@ -226,23 +250,17 @@ class Ecommerce_orders(http.Controller):
                     'info': 'The order contains no products.'}, 400
 
             # Get partner's pricelist
-            partner = request.env['res.partner'].sudo().browse(partner_id)
             price_list = partner.property_product_pricelist
             
             if not price_list:
                 return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
                     'info': 'Price list not found.'}, 400
 
-
             # Update prices based on pricelist before confirming
             for line in order_line:
                 product_product = request.env['product.product'].sudo().browse(line.product_id.id)
                 product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
-                # price = ProductPriceController.calculate_price_product(
-                #     product_tmpl.id, 
-                #     line.product_uom_qty,
-                #     partner_id
-                # )
+                
                 pricelist_price = price_list.get_product_price(product_tmpl, line.product_uom_qty, partner)
                 price = pricelist_price if pricelist_price > 0 else product_tmpl.external_basic_price
 
@@ -261,14 +279,14 @@ class Ecommerce_orders(http.Controller):
             total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
             if total_points > 0:
                 request.env['rewards.points'].sudo().create({
-                    'user_id': partner_id,
+                    'user_id': agent_customer_id if (agent_attach and agent_customer_id) else partner_id,
                     'order_id': order.id,
                     'points': total_points,
                     'status': 'gain'
                 })
 
                 total_points_obj = request.env['rewards.totalpoints'].sudo().search([
-                    ('user_id', '=', partner_id)
+                    ('user_id', '=', agent_customer_id if (agent_attach and agent_customer_id) else partner_id)
                 ], limit=1)
                 
                 if total_points_obj:
@@ -277,7 +295,7 @@ class Ecommerce_orders(http.Controller):
                     })
                 else:
                     request.env['rewards.totalpoints'].sudo().create({
-                        'user_id': partner_id,
+                        'user_id': agent_customer_id if (agent_attach and agent_customer_id) else partner_id,
                         'total_points': total_points
                     })
 
@@ -306,6 +324,7 @@ class Ecommerce_orders(http.Controller):
                             <p><strong>Numero Ordine:</strong> {order.name}</p>
                             <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
                             <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                            {f'<p><strong>Ordine Agente:</strong> Sì (ID Agente: {order_agent_id})</p>' if agent_attach else ''}
                         </div>
 
                         <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
@@ -325,39 +344,88 @@ class Ecommerce_orders(http.Controller):
             })
             template.send_mail(order.id, force_send=True)
 
-            # Handle notifications
-            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-            if filter_notification.order:
-                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-                device_token = customer.onesignal_player_id       
-                if device_token:
-                    notification_service.send_onesignal_notification(
-                        device_token,
-                        'Ordine inserito con successo',
-                        'Ordine inserito',
-                        {'type': 'order_placed'}
-                    )
-                    
-                    request.env['notification.storage'].sudo().create({
-                        'message': 'Ordine inserito con successo',
-                        'patner_id': partner_id,
-                        'title': 'Ordine inserito',
-                        'data': {'type': 'order_placed'},
-                        'include_player_ids': device_token,
-                        'filter': 'order'
-                    })
+            # Handle notifications - send to both customer and agent
+            if agent_attach and agent_customer_id:
+                # Send notification to CUSTOMER
+                customer_filter = request.env['notification.status'].sudo().search([('partner_id', '=', agent_customer_id)], limit=1)
+                if customer_filter.order:
+                    customer_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', agent_customer_id)], limit=1)
+                    if customer_notification.onesignal_player_id:
+                        notification_service.send_onesignal_notification(
+                            customer_notification.onesignal_player_id,
+                            'Il tuo ordine è stato inserito con successo',
+                            'Ordine Confermato',
+                            {'type': 'order_placed', 'role': 'customer'}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': 'Il tuo ordine è stato inserito con successo',
+                            'patner_id': agent_customer_id,
+                            'title': 'Ordine Confermato',
+                            'data': {'type': 'order_placed', 'role': 'customer'},
+                            'include_player_ids': customer_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
+                
+                # Send notification to AGENT
+                agent_filter = request.env['notification.status'].sudo().search([('partner_id', '=', user['user_id'])], limit=1)
+                if agent_filter.order:
+                    agent_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', user['user_id'])], limit=1)
+                    if agent_notification.onesignal_player_id:
+                        customer_name = request.env['res.partner'].sudo().browse(agent_customer_id).name
+                        notification_service.send_onesignal_notification(
+                            agent_notification.onesignal_player_id,
+                            f'Ordine confermato per {customer_name}',
+                            'Ordine Agente Completato',
+                            {'type': 'agent_order_placed', 'role': 'agent', 'customer_id': agent_customer_id}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': f'Ordine confermato per {customer_name}',
+                            'patner_id': user['user_id'],
+                            'title': 'Ordine Agente Completato',
+                            'data': {'type': 'agent_order_placed', 'role': 'agent', 'customer_id': agent_customer_id},
+                            'include_player_ids': agent_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
 
-                return {
-                    'status': 'success',
-                    'message': 'Ordine inserito con successo e carrello svuotato.',
-                    'info': 'Order placed successfully and cart emptied.',
-                    'order_id': order.id,
-                    'order_state': order.state,
-                    'order_amount_total': order.amount_total,
-                    'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
-                    'partner_address': shipping_address,
-                    'reward_points_earned': total_points if total_points > 0 else 0
-                }
+            else:
+                # Regular customer order notification
+                filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                if filter_notification.order:
+                    customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    device_token = customer.onesignal_player_id       
+                    if device_token:
+                        notification_service.send_onesignal_notification(
+                            device_token,
+                            'Ordine inserito con successo',
+                            'Ordine inserito',
+                            {'type': 'order_placed', 'role': 'customer'}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': 'Ordine inserito con successo',
+                            'patner_id': partner_id,
+                            'title': 'Ordine inserito',
+                            'data': {'type': 'order_placed', 'role': 'customer'},
+                            'include_player_ids': device_token,
+                            'filter': 'order'
+                        })
+
+            return {
+                'status': 'success',
+                'message': 'Ordine inserito con successo e carrello svuotato.',
+                'info': 'Order placed successfully and cart emptied.',
+                'order_id': order.id,
+                'order_state': order.state,
+                'order_amount_total': order.amount_total,
+                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                'partner_address': shipping_address,
+                'reward_points_earned': total_points if total_points > 0 else 0,
+                'agent_order': agent_attach,
+                'order_agent_id': order_agent_id if agent_attach else None,
+                'customer_id': agent_customer_id if agent_attach else partner_id
+            }
 
         except Exception as e:
             return {'status': 'error', 'message': 'Si è verificato un errore durante la conferma dell\'ordine.',

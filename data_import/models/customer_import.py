@@ -6,6 +6,7 @@ import ast
 import random
 from contextlib import closing
 import os
+import base64
 
 _logger = logging.getLogger(__name__)
 
@@ -15,6 +16,20 @@ class DataImporter(models.TransientModel):
     _inherit = 'data.importer'
     _description = 'Data Import Wizard'
     
+    def _convert_image_to_base64(self, image_path):
+        """Convert image file to base64 string"""
+        try:
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                    return encoded_string
+            else:
+                _logger.warning(f"Image file not found: {image_path}")
+                return False
+        except Exception as e:
+            _logger.error(f"Error converting image to base64: {e}")
+            return False
+        
     def _send_welcome_email(self, partner, email):
         """Send welcome email with password"""
         password = ''.join(random.choices('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', k=8))
@@ -60,6 +75,11 @@ class DataImporter(models.TransientModel):
         try:
             _logger.info("Starting customer import process...")
             file_path = os.environ.get('CUSTOMER_DATA_PATH')
+            
+            default_image_path =  os.environ.get('PROFILE_AVATAR_DATA_PATH')
+            default_image_base64 = self._convert_image_to_base64(default_image_path)
+            
+            
             with open(file_path, 'r', encoding='utf-8') as file:
                 reader = csv.DictReader(file)
                 records = [row for row in reader if row.get('id')]
@@ -141,7 +161,7 @@ class DataImporter(models.TransientModel):
                                 
                         else:
                             # Create new customer - no existing record found by ID or email
-                            customer = self.env['res.partner'].create({
+                            customer_vals = {
                                 'name': row['name'],
                                 'email': customer_email,
                                 'street': row['street'],
@@ -152,7 +172,14 @@ class DataImporter(models.TransientModel):
                                 # 'l10n_it_codice_fiscale': row['l10n_it_codice_fiscale'],
                                 'property_product_pricelist': pricelist.id,
                                 'company_id': 1,
-                            })
+                            }
+                            
+                            # Add default profile image if available
+                            if default_image_base64:
+                                customer_vals['image_1920'] = default_image_base64
+                                _logger.info(f"Adding default profile image to new customer {row['name']}")
+                            
+                            customer = self.env['res.partner'].create(customer_vals)
                             
                             # Create external import record
                             self.env['external.import'].create({

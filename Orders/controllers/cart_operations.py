@@ -305,7 +305,7 @@ class EcommerceCartLine(http.Controller):
                 }), content_type='application/json', status=401, headers={'Access-Control-Allow-Origin': '*'})
 
             partner_id = user['user_id']
-
+            
             cart_line = request.env['sale.order.line'].sudo().browse(id)
             if not cart_line.exists() or cart_line.order_id.partner_id.id != partner_id:
                 return Response(json.dumps({

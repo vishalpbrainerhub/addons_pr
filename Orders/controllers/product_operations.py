@@ -118,10 +118,6 @@ class MobileEcommerceApiController(http.Controller):
                 quantity = cart_line['product_uom_qty'] if cart_line else 0
                 cart_line_id = cart_line['cart_line_id'] if cart_line else None
                 
-                # Get pricelist price for this product - Testing different quantities
-                print(f"Product: {template.name} (ID: {template.id})")
-                print(f"Base list_price: {template.list_price}")
-                print(f"External basic price: {template.external_basic_price}")
                 
                 # Test different quantities
                 # test_quantities = [1, 100, 200, 1000, 2000]

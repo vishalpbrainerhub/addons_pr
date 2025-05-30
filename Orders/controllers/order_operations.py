@@ -209,6 +209,16 @@ class Ecommerce_orders(http.Controller):
             order_agent_id = request.jsonrequest.get('order_agent_id', None)
             agent_customer_id = request.jsonrequest.get('agent_customer_id', None)
 
+            
+            print('order_id',order_id)
+            print('agent_attach',agent_attach)
+            print('order_agent_id',order_agent_id)
+            print('agent_customer_id',agent_customer_id)
+            
+            print("------------------------------------------")
+            print("------------------------------------------")
+            print("------------------------------------------")
+            
             if not order_id:
                 return {'status': 'error', 'message': 'ID dell\'ordine non fornito.', 'info': 'Order ID is required.'}, 400
 

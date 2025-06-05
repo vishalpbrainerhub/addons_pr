@@ -208,12 +208,14 @@ class Ecommerce_orders(http.Controller):
             agent_attach = request.jsonrequest.get('agent_attach', None)
             order_agent_id = request.jsonrequest.get('order_agent_id', None)
             agent_customer_id = request.jsonrequest.get('agent_customer_id', None)
+            note =  request.jsonrequest.get('note', None)
 
             
             print('order_id',order_id)
             print('agent_attach',agent_attach)
             print('order_agent_id',order_agent_id)
             print('agent_customer_id',agent_customer_id)
+            print('note',note)
             
             print("------------------------------------------")
             print("------------------------------------------")
@@ -242,16 +244,24 @@ class Ecommerce_orders(http.Controller):
             # Handle agent-placed orders
             if agent_attach and order_agent_id and agent_customer_id:
                 # Update order with agent information
-                order.sudo().write({
+                order_data = {
                     'agent_attach': agent_attach,
                     'order_agent_id': order_agent_id,
                     'partner_id': agent_customer_id  # Change order to customer's ID
-                })
+                }
+                
+                # Add note if provided
+                if note:
+                    order_data['note'] = note
+                    
+                order.sudo().write(order_data)
                 
                 # Use customer's partner for price calculations and rewards
                 partner_id = agent_customer_id
                 partner = request.env['res.partner'].sudo().browse(partner_id)
             else:
+                if note:
+                    order.sudo().write({'note': note})
                 partner = request.env['res.partner'].sudo().browse(partner_id)
 
             order_line = request.env['sale.order.line'].sudo().search([('order_id', '=', order.id)])
@@ -332,9 +342,11 @@ class Ecommerce_orders(http.Controller):
                         
                         <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
                             <p><strong>Numero Ordine:</strong> {order.name}</p>
+                            <p><strong>Codici Prodotto:</strong> {', '.join([line.product_id.default_code or 'N/A' for line in order.order_line])}</p>
                             <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
                             <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
                             {f'<p><strong>Ordine Agente:</strong> Sì (ID Agente: {order_agent_id})</p>' if agent_attach else ''}
+                            {f'<p><strong>Note:</strong> {order.note}</p>' if order.note else ''}
                         </div>
 
                         <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>

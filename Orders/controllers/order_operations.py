@@ -55,9 +55,15 @@ class Ecommerce_orders(http.Controller):
                 }), content_type='application/json', status=401)
 
             partner_id = user['user_id']
+            
+            # Search for orders where either:
+            # 1. User is the direct customer (partner_id = user_id)
+            # 2. User is the agent who placed the order (order_agent_id = user_id)
             orders = request.env['sale.order'].sudo().search([
                 ('id', '=', order_id),
-                ('partner_id', '=', partner_id)
+                '|',
+                ('partner_id', '=', partner_id),
+                ('order_agent_id', '=', partner_id)
             ])
 
             if not orders:
@@ -70,13 +76,29 @@ class Ecommerce_orders(http.Controller):
             reward_points_records = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)])
             order_reward_points = sum(reward_points_records.mapped('points')) if reward_points_records else 0
             response_data = []
-    
+
             for order in orders:
                 user_address = request.env['social_media.custom_address'].sudo().search([
                     ('id', '=', order.shipping_address_id)
                 ])
                 shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
                 vat_data = self._calculate_vat(order)
+
+                # Determine if this is an agent order for the current user
+                is_agent_order = order.order_agent_id == partner_id
+                agent_info = None
+                
+                if is_agent_order:
+                    # Get agent information
+                    agent_partner = request.env['res.partner'].sudo().browse(order.order_agent_id)
+                    agent_info = {
+                        'agent_id': order.order_agent_id,
+                        'agent_name': agent_partner.name,
+                        'agent_email': agent_partner.email,
+                        'customer_id': order.partner_id.id,
+                        'customer_name': order.partner_id.name,
+                        'customer_email': order.partner_id.email
+                    }
 
                 order_data = {
                     'id': order.id,
@@ -87,7 +109,7 @@ class Ecommerce_orders(http.Controller):
                     'partner_id': order.partner_id.id,
                     'partner_name': order.partner_id.name,
                     'partner_email': order.partner_id.email,
-                    'external_order_state':order.external_order_state,
+                    'external_order_state': order.external_order_state,
                     'partner_phone': order.partner_id.phone,
                     'partner_address': shipping_address,
                     'vat_1_percentage': vat_data['vat_1_percentage'],
@@ -97,14 +119,16 @@ class Ecommerce_orders(http.Controller):
                     'vat_2_value': vat_data['vat_2_value'],
                     'total_amount': order.amount_total,
                     'reward_points': order_reward_points,
-                    ''
+                    'is_agent_order': is_agent_order,
+                    'agent_attach': order.agent_attach if hasattr(order, 'agent_attach') else False,
+                    'agent_info': agent_info,
+                    'note': order.note if order.note else None,
                     'all_products': []
                 }
 
                 for line in order.sudo().order_line:
-                    print(line.product_id.id,"------------prodyct id from order line")
+                    print(line.product_id.id, "------------product id from order line")
                     image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
-                    
                     
                     product_data = {
                         'id': line.product_id.id,
@@ -132,7 +156,7 @@ class Ecommerce_orders(http.Controller):
                 'message': 'Si è verificato un errore durante il recupero dei dettagli dell\'ordine.',
                 'info': str(e)
             }), content_type='application/json', status=500)
-    
+
     @http.route('/api/orders', auth='public', type='http', methods=['GET'])
     def get_orders(self):
         try:
@@ -145,9 +169,15 @@ class Ecommerce_orders(http.Controller):
                 }), content_type='application/json', status=401)
 
             partner_id = user['user_id']
+            
+            # Search for orders where either:
+            # 1. User is the direct customer (partner_id = user_id) 
+            # 2. User is the agent who placed the order (order_agent_id = user_id)
             orders = request.env['sale.order'].sudo().search([
+                ('state', '!=', 'draft'),
+                '|',
                 ('partner_id', '=', partner_id),
-                ('state', '!=', 'draft')
+                ('order_agent_id', '=', partner_id)
             ])
 
             response_data = []
@@ -159,6 +189,22 @@ class Ecommerce_orders(http.Controller):
                 
                 # Using improved VAT calculation
                 vat_data = self._calculate_vat(order)
+
+                # Determine if this is an agent order for the current user
+                is_agent_order = order.order_agent_id == partner_id
+                agent_info = None
+                
+                if is_agent_order:
+                    # Get agent information
+                    agent_partner = request.env['res.partner'].sudo().browse(order.order_agent_id)
+                    agent_info = {
+                        'agent_id': order.order_agent_id,
+                        'agent_name': agent_partner.name,
+                        'agent_email': agent_partner.email,
+                        'customer_id': order.partner_id.id,
+                        'customer_name': order.partner_id.name,
+                        'customer_email': order.partner_id.email
+                    }
 
                 order_data = {
                     'id': order.id,
@@ -176,7 +222,11 @@ class Ecommerce_orders(http.Controller):
                     'shipping_charge': 0,
                     'vat_1_value': vat_data['vat_1_value'],
                     'vat_2_value': vat_data['vat_2_value'],
-                    'total_amount': order.amount_total
+                    'total_amount': order.amount_total,
+                    'is_agent_order': is_agent_order,
+                    'agent_attach': order.agent_attach if hasattr(order, 'agent_attach') else False,
+                    'agent_info': agent_info,
+                    'note': order.note if order.note else None
                 }
                 response_data.append(order_data)
 
@@ -193,7 +243,6 @@ class Ecommerce_orders(http.Controller):
                 'message': 'Si è verificato un errore durante il recupero degli ordini.',
                 'info': str(e)
             }), content_type='application/json', status=500)
-
 
 
     @http.route('/api/confirm_order', auth='public', type='json', methods=['POST'])
@@ -462,64 +511,84 @@ class Ecommerce_orders(http.Controller):
                 return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
 
             partner_id = user['user_id']
-            partner = request.env['res.partner'].sudo().browse(partner_id)
-
             order_id = request.jsonrequest.get('order_id')
 
+            # Search for orders where either:
+            # 1. User is the direct customer (partner_id = user_id)
+            # 2. User is the agent who placed the order (order_agent_id = user_id)  
             order = request.env['sale.order'].sudo().search([
                 ('id', '=', order_id),
-                ('partner_id', '=', partner_id), 
-                ('state', 'in', ['sent', 'sale', 'done'])
+                ('state', 'in', ['sent', 'sale', 'done']),
+                '|',
+                ('partner_id', '=', partner_id),
+                ('order_agent_id', '=', partner_id)
             ], limit=1)
 
             if not order:
                 return {'status': 'error', 'message': 'Ordine non trovato o non può essere riordinato.',
                     'info': 'Order not found or cannot be reordered.'}, 404
 
+            # Determine if this is an agent reorder
+            is_agent_reorder = order.order_agent_id == partner_id
+            original_customer_id = order.partner_id.id if is_agent_reorder else partner_id
+            
+            # Create new order
             new_order = order.sudo().copy()
             
-            # Get partner's pricelist
-            partner = request.env['res.partner'].sudo().browse(partner_id)
-            price_list = partner.property_product_pricelist
+            # If it's an agent reorder, preserve agent information
+            if is_agent_reorder:
+                new_order.sudo().write({
+                    'agent_attach': order.agent_attach,
+                    'order_agent_id': order.order_agent_id,
+                    'partner_id': original_customer_id  # Keep customer as order owner
+                })
+            
+            # Get the appropriate partner for pricelist (customer, not agent)
+            pricing_partner = request.env['res.partner'].sudo().browse(original_customer_id)
+            price_list = pricing_partner.property_product_pricelist
             
             if not price_list:
                 return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
                     'info': 'Price list not found.'}, 400
 
-            # Update prices based on current pricelist
+            # Update prices based on customer's current pricelist
             for line in new_order.order_line:
                 product_product = request.env['product.product'].sudo().browse(line.product_id.id)
                 product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
                 
-                pricelist_price = price_list.get_product_price(product_tmpl, line.product_uom_qty, partner)
+                pricelist_price = price_list.get_product_price(product_tmpl, line.product_uom_qty, pricing_partner)
                 price = pricelist_price if pricelist_price > 0 else product_tmpl.external_basic_price
 
                 # Apply product discount if any
                 if product_tmpl.discount:
                     price = price * (1 - (product_tmpl.discount / 100))
                     price = round(price, 2)
-    
+
                 if price:
                     line.sudo().write({'price_unit': price})
 
+            # Confirm the new order
             new_order.sudo().action_confirm()
 
+            # Handle reward points (always go to the customer, not the agent)
             reward_points_records = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)])
             order_reward_points = sum(reward_points_records.mapped('points')) if reward_points_records else 0
+            
             if order_reward_points:
                 request.env['rewards.points'].sudo().create({
                     'points': order_reward_points,
-                    'user_id': partner_id,
+                    'user_id': original_customer_id,  # Always assign to customer
                     'order_id': new_order.id,
                     'status': 'gain' 
                 })
 
-                total_points_obj = request.env['rewards.totalpoints'].sudo().search([('user_id', '=', partner_id)])
+                total_points_obj = request.env['rewards.totalpoints'].sudo().search([('user_id', '=', original_customer_id)])
                 if total_points_obj:
                     total_points_obj.sudo().write({
                         'total_points': total_points_obj.total_points + order_reward_points
                     })
 
+            # Get shipping address
             user_address = request.env['social_media.custom_address'].sudo().search([
                 ('id', '=', new_order.shipping_address_id)
             ])
@@ -538,14 +607,29 @@ class Ecommerce_orders(http.Controller):
                     </tr>
                 """
 
+            # Email template with agent information if applicable
+            agent_info_html = ""
+            if is_agent_reorder:
+                agent_partner = request.env['res.partner'].sudo().browse(partner_id)
+                agent_info_html = f"""
+                    <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                        <h3 style="color: #1976d2; margin-bottom: 10px;">Ordine Agente</h3>
+                        <p style="margin: 0;"><strong>Agente:</strong> {agent_partner.name}</p>
+                        <p style="margin: 0;"><strong>Email Agente:</strong> {agent_partner.email}</p>
+                        <p style="margin: 0;"><strong>Cliente:</strong> {new_order.partner_id.name}</p>
+                    </div>
+                """
+
             email_template = f'''
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
                         <h2 style="color: #2C3E50; margin-bottom: 20px;">Conferma Riordine</h2>
                         
                         <p>Gentile {new_order.partner_id.name},</p>
-                        <p>Grazie per il tuo riordine. Di seguito i dettagli del tuo ordine:</p>
+                        <p>{'Un agente ha effettuato' if is_agent_reorder else 'Hai effettuato'} un riordine per te. Di seguito i dettagli del tuo ordine:</p>
                     </div>
+
+                    {agent_info_html}
 
                     <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #e9ecef;">
                         <h3 style="color: #2C3E50; margin-bottom: 15px;">Dettagli Ordine</h3>
@@ -607,6 +691,7 @@ class Ecommerce_orders(http.Controller):
                 </div>
             '''
 
+            # Send email
             template = request.env['mail.template'].sudo().create({
                 'name': 'Conferma Riordine',
                 'email_from': 'admin@primapaint.com',
@@ -618,27 +703,73 @@ class Ecommerce_orders(http.Controller):
             })
             template.send_mail(new_order.id, force_send=True)
             
-            # Handle notifications
-            filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-            if filter_notification.order:
-                customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
-                device_token = customer.onesignal_player_id       
-                if device_token:
-                    notification_service.send_onesignal_notification(
-                        device_token,
-                        'Ordine riordinato con successo',
-                        'Ordine Riordinato',
-                        {'type': 'order_reorder'}
-                    )
-                    
-                    request.env['notification.storage'].sudo().create({
-                        'message': 'Ordine riordinato con successo',
-                        'patner_id': partner_id,
-                        'title': 'Ordine Riordinato',
-                        'data': {'type': 'order_reorder'},
-                        'include_player_ids': device_token,
-                        'filter': 'order'
-                    })
+            # Handle notifications - Send to both customer and agent if applicable
+            if is_agent_reorder:
+                # Send notification to CUSTOMER
+                customer_filter = request.env['notification.status'].sudo().search([('partner_id', '=', original_customer_id)], limit=1)
+                if customer_filter.order:
+                    customer_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', original_customer_id)], limit=1)
+                    if customer_notification.onesignal_player_id:
+                        agent_partner = request.env['res.partner'].sudo().browse(partner_id)
+                        notification_service.send_onesignal_notification(
+                            customer_notification.onesignal_player_id,
+                            f'Il tuo ordine è stato riordinato da {agent_partner.name}',
+                            'Ordine Riordinato',
+                            {'type': 'agent_reorder', 'role': 'customer', 'agent_id': partner_id}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': f'Il tuo ordine è stato riordinato da {agent_partner.name}',
+                            'patner_id': original_customer_id,
+                            'title': 'Ordine Riordinato',
+                            'data': {'type': 'agent_reorder', 'role': 'customer', 'agent_id': partner_id},
+                            'include_player_ids': customer_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
+                
+                # Send notification to AGENT
+                agent_filter = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                if agent_filter.order:
+                    agent_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    if agent_notification.onesignal_player_id:
+                        customer_name = request.env['res.partner'].sudo().browse(original_customer_id).name
+                        notification_service.send_onesignal_notification(
+                            agent_notification.onesignal_player_id,
+                            f'Riordine completato per {customer_name}',
+                            'Riordine Agente Completato',
+                            {'type': 'agent_reorder_completed', 'role': 'agent', 'customer_id': original_customer_id}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': f'Riordine completato per {customer_name}',
+                            'patner_id': partner_id,
+                            'title': 'Riordine Agente Completato',
+                            'data': {'type': 'agent_reorder_completed', 'role': 'agent', 'customer_id': original_customer_id},
+                            'include_player_ids': agent_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
+            else:
+                # Regular customer reorder notification
+                filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                if filter_notification.order:
+                    customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    device_token = customer.onesignal_player_id       
+                    if device_token:
+                        notification_service.send_onesignal_notification(
+                            device_token,
+                            'Ordine riordinato con successo',
+                            'Ordine Riordinato',
+                            {'type': 'order_reorder'}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': 'Ordine riordinato con successo',
+                            'patner_id': partner_id,
+                            'title': 'Ordine Riordinato',
+                            'data': {'type': 'order_reorder'},
+                            'include_player_ids': device_token,
+                            'filter': 'order'
+                        })
 
             return {
                 'status': 'success',
@@ -649,11 +780,12 @@ class Ecommerce_orders(http.Controller):
                 'order_amount_total': new_order.amount_total,
                 'order_date_order': new_order.date_order.strftime('%Y-%m-%d %H:%M:%S') if new_order.date_order else None,
                 'order_reward_points': order_reward_points,
-                'partner_address': shipping_address
+                'partner_address': shipping_address,
+                'is_agent_reorder': is_agent_reorder,
+                'original_customer_id': original_customer_id,
+                'agent_id': partner_id if is_agent_reorder else None
             }
 
         except Exception as e:
             return {'status': 'error', 'message': 'Si è verificato un errore durante il riordino.',
                     'info': str(e)}, 500
-
-    

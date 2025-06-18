@@ -170,15 +170,69 @@ class Ecommerce_orders(http.Controller):
 
             partner_id = user['user_id']
             
-            # Search for orders where either:
-            # 1. User is the direct customer (partner_id = user_id) 
-            # 2. User is the agent who placed the order (order_agent_id = user_id)
-            orders = request.env['sale.order'].sudo().search([
-                ('state', '!=', 'draft'),
+            # Get search parameters from request
+            search_query = request.params.get('search', '').strip()
+            search_customer = request.params.get('search_customer', '').strip()
+            search_order = request.params.get('search_order', '').strip()
+            
+            # Build base domain for orders
+            base_domain = [('state', '!=', 'draft')]
+            
+            # Add user-specific domain (agent or customer)
+            user_domain = [
                 '|',
                 ('partner_id', '=', partner_id),
                 ('order_agent_id', '=', partner_id)
-            ])
+            ]
+            
+            # Build search domain
+            search_domain = []
+            
+            # If there's a general search query, search in both customer name and order name
+            if search_query:
+                search_domain.extend([
+                    '|',
+                    ('partner_id.name', 'ilike', search_query),
+                    ('name', 'ilike', search_query)
+                ])
+            
+            # If there's a specific customer search
+            if search_customer:
+                search_domain.append(('partner_id.name', 'ilike', search_customer))
+            
+            # If there's a specific order search
+            if search_order:
+                search_domain.append(('name', 'ilike', search_order))
+            
+            # Combine all domains
+            final_domain = base_domain + user_domain
+            if search_domain:
+                final_domain.extend(search_domain)
+            
+            # Search for orders
+            orders = request.env['sale.order'].sudo().search(final_domain)
+            
+            # Additional filtering for agent users searching by customer name
+            # This ensures agents can only see orders from their associated customers
+            if (search_query or search_customer):
+                # Check if current user is an agent
+                agent_orders = request.env['sale.order'].sudo().search([
+                    ('order_agent_id', '=', partner_id),
+                    ('state', '!=', 'draft')
+                ])
+                
+                # Get all customer IDs associated with this agent
+                agent_customer_ids = agent_orders.mapped('partner_id.id')
+                
+                # If user is an agent and searching, filter orders to only show:
+                # 1. Orders where user is the direct customer
+                # 2. Orders where user is the agent AND the customer is in their associated customers
+                if agent_customer_ids:
+                    filtered_orders = orders.filtered(lambda o: 
+                        o.partner_id.id == partner_id or  # User is direct customer
+                        (o.order_agent_id == partner_id and o.partner_id.id in agent_customer_ids)  # User is agent and customer is associated
+                    )
+                    orders = filtered_orders
 
             response_data = []
             for order in orders:
@@ -230,10 +284,26 @@ class Ecommerce_orders(http.Controller):
                 }
                 response_data.append(order_data)
 
+            # Prepare response message
+            search_info = []
+            if search_query:
+                search_info.append(f"general search: '{search_query}'")
+            if search_customer:
+                search_info.append(f"customer search: '{search_customer}'")
+            if search_order:
+                search_info.append(f"order search: '{search_order}'")
+            
+            message = 'Ordini recuperati con successo.'
+            info = 'Orders retrieved successfully.'
+            if search_info:
+                info += f" Applied filters: {', '.join(search_info)}"
+
             return Response(json.dumps({
                 'status': 'success',
-                'message': 'Ordini recuperati con successo.',
-                'info': 'Orders retrieved successfully.',
+                'message': message,
+                'info': info,
+                'total_orders': len(response_data),
+                'search_applied': bool(search_query or search_customer or search_order),
                 'orders': response_data
             }), content_type='application/json')
 
@@ -243,7 +313,6 @@ class Ecommerce_orders(http.Controller):
                 'message': 'Si è verificato un errore durante il recupero degli ordini.',
                 'info': str(e)
             }), content_type='application/json', status=500)
-
 
     @http.route('/api/confirm_order', auth='public', type='json', methods=['POST'])
     def confirm_order(self, **post):

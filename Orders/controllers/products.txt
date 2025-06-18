@@ -1,621 +1,791 @@
-from odoo import http, fields
+from odoo import http, _ , fields
 from odoo.http import request, Response
 import json
+from datetime import datetime
 from .user_authentication import SocialMediaAuth
-import random
-import math
+from .notification_service import CustomerController
 from .helper_functions import ProductPriceController
-import os
-import base64
-from .test import get_product_details
 
-class MobileEcommerceApiController(http.Controller):    
-    
-    def get_product_list_price(self, partner_id, page=1, page_size=20, category_ids=None, search_term=None):
+import logging
+_logger = logging.getLogger(__name__)
+
+notification_service = CustomerController()
+
+class Ecommerce_orders(http.Controller):
+
+    def _calculate_vat(self, order):
         """
-        Get paginated product list with prices
+        Calculate VAT (IVA) for an order by applying a fixed 22% tax rate.
         
         Args:
-            partner_id: ID of the partner
-            page: Page number (default: 1)
-            page_size: Number of items per page (default: 20)
-            category_ids: List of category IDs to filter by (optional)
-            search_term: Search term to filter products by name or default_code (optional)
+            order: The sale.order object
+            
+        Returns:
+            dict: Dictionary containing vat percentages and values
         """
-        cr = request.env.cr
-        env = request.env
-        
-        
-        data = []
-        total_items = 0
-        
-        # Create base domain for products
-        domain = [
-            # ('sale_ok', '=', True),
-            # ('is_published', '=', True)
-        ]
-        
-        # Add category filter if specified
-        if category_ids:
-            domain.append(('categ_id', 'in', category_ids))
-        
-        # Add search term filter if specified
-        if search_term:
-            domain.append('|')
-            domain.append(('name', 'ilike', search_term))
-            domain.append(('default_code', 'ilike', search_term))
-        
-        # Get all matching product templates
-        product_templates = env['product.template'].sudo().search(domain)
-        total_items = len(product_templates)
-        
-        # Calculate pagination
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        
-        # Get paginated items
-        paginated_templates = product_templates[start_idx:end_idx]
-        
-        # Get pricelist_id from result
-        pricelist_id = 5
-        
-        # Fetch product details for each template
-        for template in paginated_templates:
-            product_info = env['product.template'].sudo().search_read([('id', '=', template.id)], [
-                'name', 'list_price', 'active', 'barcode', 'color', 'discount', 
-                'is_published', 'rewards_score', 'categ_id', 'code_', 'image_1920', 
-                'default_code', 'external_id', 'external_basic_price'
-            ])
-            
-            if not product_info:
-                continue
-            
-            product_dict = {
-                'name': product_info[0]['name'],
-                'list_price': product_info[0]['list_price'],
-                'active': product_info[0]['active'],
-                'barcode': product_info[0]['barcode'],
-                'color': product_info[0]['color'],
-                'id': template.id,
-                'discount': product_info[0].get('discount', 0),
-                'is_published': product_info[0].get('is_published', False),
-                'rewards_score': product_info[0].get('rewards_score', 0),
-                'code_': product_info[0].get('default_code', False),
-                'min_quantity': [],  # Initialize as empty list
-                'category_id': product_info[0]['categ_id'][0] if product_info[0].get('categ_id') else False,
-                'image_1920': product_info[0]['image_1920'] or '',
-                'external_id': product_info[0]['external_id'],
-                'external_basic_price': product_info[0]['external_basic_price']
-            }
-            
-            data.append(product_dict)
-        
-        pagination_info = {
-            'total_items': total_items,
-            'total_pages': math.ceil(total_items / page_size) if total_items > 0 else 0,
-            'current_page': page,
-            'page_size': page_size,
-            'has_next': page < math.ceil(total_items / page_size) if total_items > 0 else False,
-            'has_previous': page > 1
+        vat_data = {
+            'vat_1_percentage': 22.0,
+            'vat_2_percentage': 0.0,
+            'vat_1_value': 0.0,
+            'vat_2_value': 0.0
         }
         
-        return data, pagination_info, pricelist_id
+        # Process each order line and apply 22% tax
+        for line in order.order_line:
+            line_amount = line.price_subtotal
+            
+            # Calculate and add tax value with 22% rate
+            tax_value = round(line_amount * (22.0 / 100.0), 2)
+            vat_data['vat_1_value'] += tax_value
+        
+        # Final rounding
+        vat_data['vat_1_value'] = round(vat_data['vat_1_value'], 2)
+        
+        return vat_data
 
-    @http.route('/api/products', auth='public', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
-    def get_products(self):
-        if request.httprequest.method == 'OPTIONS':
-            headers = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, OPTIONS', 
-                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-                'Access-Control-Max-Age': '86400',
-            }
-            return Response(status=204, headers=headers)
-
+    @http.route('/api/orders/<int:order_id>', auth='public', type='http', methods=['GET'])
+    def get_order_single(self, order_id):
         try:
-            # Get pagination parameters from request
-            page = int(request.params.get('page', 1))
-            page_size = int(request.params.get('page_size', 20))
-            
-            # Get category_id parameter, if provided
-            category_param = request.params.get('category_id', None)
-            category_ids = None
-            
-            if category_param:
-                # Split by comma and convert to integers
-                category_ids = [int(cat_id) for cat_id in category_param.split(',') if cat_id.strip()]
-            
-            # Get search parameter, if provided
-            search_term = request.params.get('search', None)
-            
-            user_info = SocialMediaAuth.user_auth(self)
-            if user_info['status'] == 'error':
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': 'Autenticazione fallita',
-                        'info': user_info['message']
-                    }),
-                    content_type='application/json',
-                    status=401,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
-
-            partner_id = user_info['user_id']
-            
-            products_data, pagination_info, pricelist_id = self.get_product_list_price(
-                partner_id, 
-                page, 
-                page_size, 
-                category_ids,
-                search_term
-            )
-
-            order_lines = request.env['sale.order.line'].sudo().search([
-                ('order_id.partner_id', '=', partner_id),
-                ('order_id.state', '=', 'draft')
-            ])
-
-            cart_lines_map = []
-            for line in order_lines:
-                dict = {}
-                dict['product_id'] = line.product_id.id
-                dict['cart_line_id'] = line.id
-                dict['product_uom_qty'] = line.product_uom_qty
-                cart_lines_map.append(dict)
-
-            product_list = []
-            
-            for product in products_data:
-                # Look for a product variant associated with this template
-                product_variants = request.env['product.product'].sudo().search([('product_tmpl_id', '=', product['id'])])
-                
-                # If multiple variants, use the first one
-                product_variant_id = product_variants[0].id if product_variants else product['id']
-                
-                cart_line = None
-                for line in cart_lines_map:
-                    if line['product_id'] == product['id'] or line['product_id'] == product_variant_id:
-                        cart_line = line
-                        break
-                
-                quantity = cart_line['product_uom_qty'] if cart_line else 0
-                cart_line_id = cart_line['cart_line_id'] if cart_line else None
-            
-                final_price = product['external_basic_price']
-                if product['discount']:
-                    final_price = final_price * (1 - (product['discount'] / 100))
-                    final_price = round(final_price, 2)
-                
-                pr_id = product['id']
-                
-                product_data = {
-                    'name': product['name'],
-                    'list_price': final_price,
-                    'active': product['active'], 
-                    'barcode': product['barcode'],
-                    'color': product['color'],
-                    'image': "/web/image?model=res.users&field=avatar_128&id=2",
-                    'id': product['id'],
-                    'quantity': quantity,
-                    'cart_line_id': cart_line_id,
-                    'discount': product["discount"],
-                    'is_published': product["is_published"],
-                    'rewards_score': product["rewards_score"],
-                    'code': product["code_"] if product["code_"] else None,
-                    'discounted_price': final_price*quantity,
-                    'min_quantity': product.get('min_quantity'),
-                    'category_id': product['category_id'],
-                    'external_id': product['external_id'],
-                    'image': f'/web/image/product.template/{pr_id}/image_1920' if product['image_1920'] else None,
-                }
-                product_list.append(product_data)
-
-            response_data = {
-                'status': 'success',
-                'message': 'Prodotti recuperati con successo',
-                'info': f'Products retrieved successfully' + (f' for categories {category_param}' if category_param else f' from page {page}') + (f' matching search: {search_term}' if search_term else ''),
-                'pagination': pagination_info,
-                'total_products': len(product_list),
-                'products': product_list
-            }
-            
-            return Response(
-                json.dumps(response_data), 
-                content_type='application/json',
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-
-        except Exception as e:
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'message': 'Errore del server interno',
-                    'info': str(e)
-                }),
-                content_type='application/json', 
-                status=500,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-    
-               
-    @http.route('/images/products/<int:product_id>/<path:image>', type='http', auth='public', csrf=False, cors='*')
-    def get_product_image(self, product_id, image):
-        try:
-            base_path = '/mnt/data/images'
-            image_path = os.path.join(base_path, 'products', str(product_id), image.lstrip('/'))
-            safe_path = os.path.join(base_path, 'products', str(product_id))
-            
-            # Security check to prevent directory traversal
-            if not os.path.abspath(image_path).startswith(os.path.abspath(safe_path)):
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
                 return Response(json.dumps({
-                    'error': {'message': 'Invalid image path'},
                     'status': 'error',
-                    'status_code': '403'
-                }), content_type='application/json', status=403)
+                    'message': user['message'],
+                    'info': 'Authentication failed.'
+                }), content_type='application/json', status=401)
 
-            if os.path.exists(image_path):
-                with open(image_path, 'rb') as f:
-                    return Response(f.read(), content_type='image/png')
+            partner_id = user['user_id']
+            
+            # Search for orders where either:
+            # 1. User is the direct customer (partner_id = user_id)
+            # 2. User is the agent who placed the order (order_agent_id = user_id)
+            orders = request.env['sale.order'].sudo().search([
+                ('id', '=', order_id),
+                '|',
+                ('partner_id', '=', partner_id),
+                ('order_agent_id', '=', partner_id)
+            ])
 
-            return Response(json.dumps({
-                'error': {'message': 'Product image not found'},
-                'status': 'error',
-                'status_code': '404'
-            }), content_type='application/json', status=404)
+            if not orders:
+                return Response(json.dumps({
+                    'status': 'error',
+                    'message': 'Ordine non trovato.',
+                    'info': 'Order not found.'
+                }), content_type='application/json', status=404)
+
+            reward_points_records = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)])
+            order_reward_points = sum(reward_points_records.mapped('points')) if reward_points_records else 0
+            response_data = []
+
+            for order in orders:
+                user_address = request.env['social_media.custom_address'].sudo().search([
+                    ('id', '=', order.shipping_address_id)
+                ])
+                shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+                vat_data = self._calculate_vat(order)
+
+                # Determine if this is an agent order for the current user
+                is_agent_order = order.order_agent_id == partner_id
+                agent_info = None
+                
+                if is_agent_order:
+                    # Get agent information
+                    agent_partner = request.env['res.partner'].sudo().browse(order.order_agent_id)
+                    agent_info = {
+                        'agent_id': order.order_agent_id,
+                        'agent_name': agent_partner.name,
+                        'agent_email': agent_partner.email,
+                        'customer_id': order.partner_id.id,
+                        'customer_name': order.partner_id.name,
+                        'customer_email': order.partner_id.email
+                    }
+
+                order_data = {
+                    'id': order.id,
+                    'name': order.name,
+                    'state': order.state,
+                    'taxable_amount': order.amount_untaxed,
+                    'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                    'partner_id': order.partner_id.id,
+                    'partner_name': order.partner_id.name,
+                    'partner_email': order.partner_id.email,
+                    'external_order_state': order.external_order_state,
+                    'partner_phone': order.partner_id.phone,
+                    'partner_address': shipping_address,
+                    'vat_1_percentage': vat_data['vat_1_percentage'],
+                    'vat_2_percentage': vat_data['vat_2_percentage'],
+                    'shipping_charge': 0,
+                    'vat_1_value': vat_data['vat_1_value'],
+                    'vat_2_value': vat_data['vat_2_value'],
+                    'total_amount': order.amount_total,
+                    'reward_points': order_reward_points,
+                    'is_agent_order': is_agent_order,
+                    'agent_attach': order.agent_attach if hasattr(order, 'agent_attach') else False,
+                    'agent_info': agent_info,
+                    'note': order.note if order.note else None,
+                    'all_products': []
+                }
+
+                for line in order.sudo().order_line:
+                    print(line.product_id.id, "------------product id from order line")
+                    image_url = '/web/image/product.product/' + str(line.product_id.id) + '/image_1920' if line.product_id.image_1920 else None
+                    
+                    product_data = {
+                        'id': line.product_id.id,
+                        'name': line.product_id.name,
+                        'list_price': line.price_unit * line.product_uom_qty,
+                        'active': line.product_id.active,
+                        'barcode': line.product_id.barcode,
+                        'color': line.product_id.color,
+                        'image': image_url,
+                        'quantity': line.product_uom_qty,
+                        'base_price': line.price_unit,
+                        'discount': line.discount or 0,
+                        'order_id': line.order_id.id,
+                        'code': line.product_id.default_code,
+                    }
+                    order_data['all_products'].append(product_data)
+
+                response_data.append(order_data)
+
+            return Response(json.dumps(response_data), content_type='application/json')
 
         except Exception as e:
             return Response(json.dumps({
-                'error': {'message': 'Server error'},
-                'status': 'error', 
-                'status_code': '500'
+                'status': 'error',
+                'message': 'Si è verificato un errore durante il recupero dei dettagli dell\'ordine.',
+                'info': str(e)
             }), content_type='application/json', status=500)
-    
-    
-    @http.route('/api/products/<int:product_code>', auth='none', type='http', methods=['POST', 'OPTIONS'], csrf=False, cors='*')
-    def get_product(self, product_code):
-        """
-        Retrieve a specific product by its code. Supports CORS and can handle preflight requests.
-        parameters: product_code (int) - Unique identifier for the product
-        """
-        # Handle OPTIONS request for CORS preflight
-        if request.httprequest.method == 'OPTIONS':
-            headers = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-                'Access-Control-Max-Age': '86400',  # 24 hours
-            }
-            return Response(status=204, headers=headers)
 
+    @http.route('/api/orders', auth='public', type='http', methods=['GET'])
+    def get_orders(self):
         try:
-            # Authenticate user and handle errors
-            user_info = SocialMediaAuth.user_auth(self)
-            if user_info['status'] == 'error':
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': 'Autenticazione fallita', 
-                        'info': user_info['message']  
-                    }),
-                    content_type='application/json',
-                    status=401,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
-            partner_id = user_info['user_id']
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return Response(json.dumps({
+                    'status': 'error', 
+                    'message': user['message'],
+                    'info': 'Authentication failed.'
+                }), content_type='application/json', status=401)
 
-            # Retrieve the product data based on code
-            product_data = request.env['product.template'].search_read([('default_code', '=', product_code)], [
-                'id', 'name', 'list_price', 'active', 'barcode', 'color', 'image_1920', 'discount', 
-                'is_published', 'rewards_score', 'default_code', 'code_'
-            ])
-            product_list = []
-
-            # Fetch draft order lines to check quantities in the cart
-            order_lines = request.env['sale.order.line'].sudo().search([
-                ('order_partner_id', '=', partner_id), ('state', '=', 'draft')
-            ])
+            partner_id = user['user_id']
             
-            # Create a mapping of product IDs to their corresponding order lines
-            cart_lines_map = []
-            for line in order_lines:
-                cart_lines_map.append({
-                    'product_id': line.product_id.id,
-                    'cart_line_id': line.id,
-                    'product_uom_qty': line.product_uom_qty
+            # Search for orders where either:
+            # 1. User is the direct customer (partner_id = user_id) 
+            # 2. User is the agent who placed the order (order_agent_id = user_id)
+            orders = request.env['sale.order'].sudo().search([
+                ('state', '!=', 'draft'),
+                '|',
+                ('partner_id', '=', partner_id),
+                ('order_agent_id', '=', partner_id)
+            ])
+
+            response_data = []
+            for order in orders:
+                user_address = request.env['social_media.custom_address'].sudo().search([
+                    ('id', '=', order.shipping_address_id)
+                ])
+                shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+                
+                # Using improved VAT calculation
+                vat_data = self._calculate_vat(order)
+
+                # Determine if this is an agent order for the current user
+                is_agent_order = order.order_agent_id == partner_id
+                agent_info = None
+                
+                if is_agent_order:
+                    # Get agent information
+                    agent_partner = request.env['res.partner'].sudo().browse(order.order_agent_id)
+                    agent_info = {
+                        'agent_id': order.order_agent_id,
+                        'agent_name': agent_partner.name,
+                        'agent_email': agent_partner.email,
+                        'customer_id': order.partner_id.id,
+                        'customer_name': order.partner_id.name,
+                        'customer_email': order.partner_id.email
+                    }
+
+                order_data = {
+                    'id': order.id,
+                    'name': order.name,
+                    'state': order.state,
+                    'taxable_amount': order.amount_untaxed,
+                    'date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                    'partner_id': order.partner_id.id,
+                    'partner_name': order.partner_id.name,
+                    'partner_email': order.partner_id.email,
+                    'partner_phone': order.partner_id.phone,
+                    'partner_address': shipping_address,
+                    'vat_1_percentage': vat_data['vat_1_percentage'],
+                    'vat_2_percentage': vat_data['vat_2_percentage'],
+                    'shipping_charge': 0,
+                    'vat_1_value': vat_data['vat_1_value'],
+                    'vat_2_value': vat_data['vat_2_value'],
+                    'total_amount': order.amount_total,
+                    'is_agent_order': is_agent_order,
+                    'agent_attach': order.agent_attach if hasattr(order, 'agent_attach') else False,
+                    'agent_info': agent_info,
+                    'note': order.note if order.note else None
+                }
+                response_data.append(order_data)
+
+            return Response(json.dumps({
+                'status': 'success',
+                'message': 'Ordini recuperati con successo.',
+                'info': 'Orders retrieved successfully.',
+                'orders': response_data
+            }), content_type='application/json')
+
+        except Exception as e:
+            return Response(json.dumps({
+                'status': 'error',
+                'message': 'Si è verificato un errore durante il recupero degli ordini.',
+                'info': str(e)
+            }), content_type='application/json', status=500)
+
+
+    @http.route('/api/confirm_order', auth='public', type='json', methods=['POST'])
+    def confirm_order(self, **post):
+        try:
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
+
+            partner_id = user['user_id']
+            order_id = request.jsonrequest.get('order_id')
+            agent_attach = request.jsonrequest.get('agent_attach', None)
+            order_agent_id = request.jsonrequest.get('order_agent_id', None)
+            agent_customer_id = request.jsonrequest.get('agent_customer_id', None)
+            note =  request.jsonrequest.get('note', None)
+
+            
+            print('order_id',order_id)
+            print('agent_attach',agent_attach)
+            print('order_agent_id',order_agent_id)
+            print('agent_customer_id',agent_customer_id)
+            print('note',note)
+            
+            print("------------------------------------------")
+            print("------------------------------------------")
+            print("------------------------------------------")
+            
+            if not order_id:
+                return {'status': 'error', 'message': 'ID dell\'ordine non fornito.', 'info': 'Order ID is required.'}, 400
+
+            # For agent orders, search by order_id only since partner_id will change
+            if agent_attach and agent_customer_id:
+                order = request.env['sale.order'].sudo().search([
+                    ('id', '=', order_id),
+                    ('state', '=', 'draft')
+                ], limit=1)
+            else:
+                order = request.env['sale.order'].sudo().search([
+                    ('id', '=', order_id),
+                    ('partner_id', '=', partner_id),
+                    ('state', '=', 'draft')
+                ], limit=1)
+
+            if not order:
+                return {'status': 'error', 'message': 'Ordine non trovato o già confermato.', 
+                    'info': 'Order not found or already confirmed.'}, 404
+
+            # Handle agent-placed orders
+            if agent_attach and order_agent_id and agent_customer_id:
+                # Update order with agent information
+                order_data = {
+                    'agent_attach': agent_attach,
+                    'order_agent_id': order_agent_id,
+                    'partner_id': agent_customer_id  # Change order to customer's ID
+                }
+                
+                # Add note if provided
+                if note:
+                    order_data['note'] = note
+                    
+                order.sudo().write(order_data)
+                
+                # Use customer's partner for price calculations and rewards
+                partner_id = agent_customer_id
+                partner = request.env['res.partner'].sudo().browse(partner_id)
+            else:
+                if note:
+                    order.sudo().write({'note': note})
+                partner = request.env['res.partner'].sudo().browse(partner_id)
+
+            order_line = request.env['sale.order.line'].sudo().search([('order_id', '=', order.id)])
+            if not order_line:
+                return {'status': 'error', 'message': "L'ordine non contiene prodotti.", 
+                    'info': 'The order contains no products.'}, 400
+
+            # Get partner's pricelist
+            price_list = partner.property_product_pricelist
+            
+            if not price_list:
+                return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
+                    'info': 'Price list not found.'}, 400
+
+            # Update prices based on pricelist before confirming
+            for line in order_line:
+                product_product = request.env['product.product'].sudo().browse(line.product_id.id)
+                product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
+                
+                pricelist_price = price_list.get_product_price(product_tmpl, line.product_uom_qty, partner)
+                price = pricelist_price if pricelist_price > 0 else product_tmpl.external_basic_price
+
+                # Apply product discount if any
+                if product_tmpl.discount:
+                    price = price * (1 - (product_tmpl.discount / 100))
+                    price = round(price, 2)
+                
+                if price:
+                    line.sudo().write({'price_unit': price})
+
+            # Confirm order
+            order.sudo().action_confirm()
+
+            # Handle rewards points
+            total_points = sum(line.product_id.rewards_score * line.product_uom_qty for line in order_line)
+            if total_points > 0:
+                request.env['rewards.points'].sudo().create({
+                    'user_id': agent_customer_id if (agent_attach and agent_customer_id) else partner_id,
+                    'order_id': order.id,
+                    'points': total_points,
+                    'status': 'gain'
                 })
 
-            # Retrieve product pricelist for the partner
-            cr = request.env.cr
-            cr.execute("""
-                SELECT 
-                    rp.id as partner_id,
-                    pp.id as pricelist_id
-                FROM res_partner rp
-                LEFT JOIN ir_property ip ON ip.res_id = CONCAT('res.partner,', rp.id)
-                LEFT JOIN product_pricelist pp ON pp.id = CAST(SUBSTRING(ip.value_reference FROM 'product.pricelist,(.*)') AS INTEGER)
-                WHERE ip.name = 'property_product_pricelist'
-                AND rp.id = %s
-            """, (partner_id,))
-            
-            result = cr.fetchone()
-            pricelist_id = result[1] if result and result[1] else False
-            
-            for product in product_data:
-                # Handle image conversion to URL if needed
-                image_url = '/web/image/product.template/' + str(product['id']) + '/image_1920' if product['image_1920'] else None
+                total_points_obj = request.env['rewards.totalpoints'].sudo().search([
+                    ('user_id', '=', agent_customer_id if (agent_attach and agent_customer_id) else partner_id)
+                ], limit=1)
                 
-                # Calculate the price based on pricelist if available
-                price = product['list_price']
-                if pricelist_id:
-                    pricelist = request.env['product.pricelist'].sudo().browse(pricelist_id)
-                    pricelist_items = pricelist.item_ids.filtered(
-                        lambda item: (item.product_tmpl_id.id == product['id']) or 
-                                    (item.categ_id and item.categ_id.id == product.get('categ_id', [False])[0])
-                    )
-                    
-                    if pricelist_items:
-                        for item in pricelist_items:
-                            if item.compute_price == 'percentage':
-                                price = product['list_price'] * (1 - (item.percent_price / 100))
-                            elif item.compute_price == 'fixed':
-                                price = item.fixed_price
-                            elif item.compute_price == 'formula':
-                                price = product['list_price'] * (1 - (item.price_discount / 100))
-                
-                # Apply discount if present
-                discounted_price = price
-                if product["discount"]:
-                    discounted_price = price * (1 - (product["discount"] / 100))
-                
-                product_details = {
-                    'name': product['name'],
-                    'list_price': price,
-                    'active': product['active'],
-                    'barcode': product['barcode'],
-                    'color': product['color'],
-                    'image': image_url,
-                    'id': product['id'],
-                    'quantity': 0,
-                    'cart_line_id': None,
-                    'discount': product["discount"],
-                    'is_published': product["is_published"],
-                    'rewards_score': product["rewards_score"],
-                    'code': product["default_code"],
-                    'discounted_price': discounted_price,
-                }
-                
-                # Check if the product is in cart
-                for line in cart_lines_map:
-                    if line['product_id'] == product['id']:
-                        product_details['quantity'] = line['product_uom_qty']
-                        product_details['cart_line_id'] = line['cart_line_id']
-                        break
-                
-                product_list.append(product_details)
+                if total_points_obj:
+                    total_points_obj.sudo().write({
+                        'total_points': total_points_obj.total_points + total_points
+                    })
+                else:
+                    request.env['rewards.totalpoints'].sudo().create({
+                        'user_id': agent_customer_id if (agent_attach and agent_customer_id) else partner_id,
+                        'total_points': total_points
+                    })
 
-            # Successful response with product data
-            response_data = {
+            # Get shipping address
+            user_address = request.env['social_media.custom_address'].sudo().search([
+                ('id', '=', order.shipping_address_id)
+            ])
+
+            shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+
+            # Send confirmation email
+            template = request.env['mail.template'].sudo().create({
+                'name': 'Conferma Ordine',
+                'email_from': 'admin@primapaint.com',
+                'email_to': f"{order.partner_id.email}, staff@primapaint.it",
+                'subject': f'Ordine #{order.name} Confermato',
+                'body_html': f'''
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #2C3E50;">Conferma Ordine</h2>
+                        
+                        <p>Caro/a {order.partner_id.name},</p>
+                        
+                        <p>Grazie per il tuo ordine. Dettagli dell'ordine:</p>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                            <p><strong>Numero Ordine:</strong> {order.name}</p>
+                            <p><strong>Codici Prodotto:</strong> {', '.join([line.product_id.default_code or 'N/A' for line in order.order_line])}</p>
+                            <p><strong>Data Ordine:</strong> {order.date_order.strftime('%Y-%m-%d %H:%M')}</p>
+                            <p><strong>Importo Totale:</strong> {order.currency_id.symbol}{order.amount_total:.2f}</p>
+                            {f'<p><strong>Ordine Agente:</strong> Sì (ID Agente: {order_agent_id})</p>' if agent_attach else ''}
+                            {f'<p><strong>Note:</strong> {order.note}</p>' if order.note else ''}
+                        </div>
+
+                        <h3 style="color: #2C3E50; margin-top: 20px;">Indirizzo di Spedizione:</h3>
+                        <p style="background: #f8f9fa; padding: 15px; border-radius: 5px;">
+                            {order.partner_shipping_id.street or ''}<br>
+                            {order.partner_shipping_id.city or ''}, {order.partner_shipping_id.state_id.name or ''} {order.partner_shipping_id.zip or ''}<br>
+                            {order.partner_shipping_id.country_id.name or ''}
+                        </p>
+
+                        <p style="color: #666; margin-top: 30px; font-size: 12px;">
+                            Se hai domande, ti preghiamo di contattare il nostro servizio clienti.
+                        </p>
+                    </div>
+                ''',
+                'model_id': request.env['ir.model']._get('sale.order').id,
+                'auto_delete': True
+            })
+            template.send_mail(order.id, force_send=True)
+
+            # Handle notifications - send to both customer and agent
+            if agent_attach and agent_customer_id:
+                # Send notification to CUSTOMER
+                customer_filter = request.env['notification.status'].sudo().search([('partner_id', '=', agent_customer_id)], limit=1)
+                if customer_filter.order:
+                    customer_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', agent_customer_id)], limit=1)
+                    if customer_notification.onesignal_player_id:
+                        notification_service.send_onesignal_notification(
+                            customer_notification.onesignal_player_id,
+                            'Il tuo ordine è stato inserito con successo',
+                            'Ordine Confermato',
+                            {'type': 'order_placed', 'role': 'customer'}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': 'Il tuo ordine è stato inserito con successo',
+                            'patner_id': agent_customer_id,
+                            'title': 'Ordine Confermato',
+                            'data': {'type': 'order_placed', 'role': 'customer'},
+                            'include_player_ids': customer_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
+                
+                # Send notification to AGENT
+                agent_filter = request.env['notification.status'].sudo().search([('partner_id', '=', user['user_id'])], limit=1)
+                if agent_filter.order:
+                    agent_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', user['user_id'])], limit=1)
+                    if agent_notification.onesignal_player_id:
+                        customer_name = request.env['res.partner'].sudo().browse(agent_customer_id).name
+                        notification_service.send_onesignal_notification(
+                            agent_notification.onesignal_player_id,
+                            f'Ordine confermato per {customer_name}',
+                            'Ordine Agente Completato',
+                            {'type': 'agent_order_placed', 'role': 'agent', 'customer_id': agent_customer_id}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': f'Ordine confermato per {customer_name}',
+                            'patner_id': user['user_id'],
+                            'title': 'Ordine Agente Completato',
+                            'data': {'type': 'agent_order_placed', 'role': 'agent', 'customer_id': agent_customer_id},
+                            'include_player_ids': agent_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
+
+            else:
+                # Regular customer order notification
+                filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                if filter_notification.order:
+                    customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    device_token = customer.onesignal_player_id       
+                    if device_token:
+                        notification_service.send_onesignal_notification(
+                            device_token,
+                            'Ordine inserito con successo',
+                            'Ordine inserito',
+                            {'type': 'order_placed', 'role': 'customer'}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': 'Ordine inserito con successo',
+                            'patner_id': partner_id,
+                            'title': 'Ordine inserito',
+                            'data': {'type': 'order_placed', 'role': 'customer'},
+                            'include_player_ids': device_token,
+                            'filter': 'order'
+                        })
+
+            return {
                 'status': 'success',
-                'message': 'Prodotto recuperato con successo', 
-                'info': 'Product retrieved successfully',  
-                'products': product_list,
-                'total_products': len(product_list)
+                'message': 'Ordine inserito con successo e carrello svuotato.',
+                'info': 'Order placed successfully and cart emptied.',
+                'order_id': order.id,
+                'order_state': order.state,
+                'order_amount_total': order.amount_total,
+                'order_date_order': order.date_order.strftime('%Y-%m-%d %H:%M:%S') if order.date_order else None,
+                'partner_address': shipping_address,
+                'reward_points_earned': total_points if total_points > 0 else 0,
+                'agent_order': agent_attach,
+                'order_agent_id': order_agent_id if agent_attach else None,
+                'customer_id': agent_customer_id if agent_attach else partner_id
             }
-            return Response(json.dumps(response_data), content_type='application/json', headers={'Access-Control-Allow-Origin': '*'})
 
         except Exception as e:
-            # Handle any unexpected errors
-            return Response(json.dumps({
-                'status': 'error',
-                'message': 'Errore del server interno', 
-                'info': str(e)  
-            }), content_type='application/json', status=500, headers={'Access-Control-Allow-Origin': '*'})
-    
+            return {'status': 'error', 'message': 'Si è verificato un errore durante la conferma dell\'ordine.',
+                    'info': str(e)}, 500
         
 
-    @http.route('/api/products/<int:product_id>', auth='public', type='json', methods=['PUT', 'OPTIONS'], csrf=False, cors='*')
-    def update_product_quantity(self, product_id):
-        if request.httprequest.method == 'OPTIONS':
-            headers = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'PUT, OPTIONS',
-                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-                'Access-Control-Max-Age': '86400'
-            }
-            return Response(status=204, headers=headers)
+    @http.route('/api/reorder', auth='public', type='json', methods=['POST'])
+    def reorder(self):
         try:
-            user_info = SocialMediaAuth.user_auth(self)
-            if user_info['status'] == 'error':
-                return {
-                    'status': 'error',
-                    'message': 'Autenticazione fallita',
-                    'info': user_info['message']
-                }, 401
+            user = SocialMediaAuth.user_auth(self)
+            if user['status'] == 'error':
+                return {'status': 'error', 'message': user['message'], 'info': 'Authentication failed.'}
 
-            partner_id = user_info['user_id']
-            test_product = request.env['product.template'].sudo().search([('id', '=', product_id)], limit=1)
-            product = request.env['product.product'].sudo().search([('product_tmpl_id', '=', test_product.id)], limit=1)
-            if not product:
-                return {
-                    'status': 'error',
-                    'message': 'Prodotto non trovato',
-                    'info': 'Product not found'
-                }, 404
+            partner_id = user['user_id']
+            order_id = request.jsonrequest.get('order_id')
 
-            quantity = request.jsonrequest.get('quantity', 0)
-            if quantity < 0:
-                return {
-                    'status': 'error',
-                    'message': 'La quantità deve essere un numero non negativo',
-                    'info': 'Quantity must be a non-negative number'
-                }, 400
-
-            sale_order = request.env['sale.order'].sudo().search([
-                ('partner_id', '=', partner_id), 
-                ('state', '=', 'draft')
+            # Search for orders where either:
+            # 1. User is the direct customer (partner_id = user_id)
+            # 2. User is the agent who placed the order (order_agent_id = user_id)  
+            order = request.env['sale.order'].sudo().search([
+                ('id', '=', order_id),
+                ('state', 'in', ['sent', 'sale', 'done']),
+                '|',
+                ('partner_id', '=', partner_id),
+                ('order_agent_id', '=', partner_id)
             ], limit=1)
 
-            if not sale_order:
-                # create sale order
-                partner_pricelist = request.env['res.partner'].sudo().browse(partner_id).property_product_pricelist
-                sale_order = request.env['sale.order'].sudo().create({
-                    'partner_id': partner_id,
-                    'partner_invoice_id': partner_id,
-                    'partner_shipping_id': partner_id,
-                    'pricelist_id': partner_pricelist.id,
-                    'company_id': 1
+            if not order:
+                return {'status': 'error', 'message': 'Ordine non trovato o non può essere riordinato.',
+                    'info': 'Order not found or cannot be reordered.'}, 404
+
+            # Determine if this is an agent reorder
+            is_agent_reorder = order.order_agent_id == partner_id
+            original_customer_id = order.partner_id.id if is_agent_reorder else partner_id
+            
+            # Create new order
+            new_order = order.sudo().copy()
+            
+            # If it's an agent reorder, preserve agent information
+            if is_agent_reorder:
+                new_order.sudo().write({
+                    'agent_attach': order.agent_attach,
+                    'order_agent_id': order.order_agent_id,
+                    'partner_id': original_customer_id  # Keep customer as order owner
                 })
             
-
-            env = request.env['sale.order.line'].with_company(sale_order.company_id)
-            order_line = env.sudo().search([('product_id', '=', product.id), ('order_id', '=', sale_order.id)])
+            # Get the appropriate partner for pricelist (customer, not agent)
+            pricing_partner = request.env['res.partner'].sudo().browse(original_customer_id)
+            price_list = pricing_partner.property_product_pricelist
             
-            if order_line:
-                if quantity == 0:
-                    order_line.sudo().unlink()
-                    return {
-                        'status': 'success',
-                        'message': 'Prodotto rimosso dal carrello con successo',
-                        'info': 'Product removed from cart successfully',
-                        'quantity': 0,
-                        'cart_line_id': None
-                    }
-                else:
-                    order_line.sudo().write({'product_uom_qty': quantity})
-                    return {
-                        'status': 'success',
-                        'message': 'Quantità del prodotto aggiornata con successo',
-                        'info': 'Product quantity updated successfully',
-                        'quantity': quantity,
-                        'cart_line_id': order_line.id
-                    }
+            if not price_list:
+                return {'status': 'error', 'message': 'Listino prezzi non trovato.', 
+                    'info': 'Price list not found.'}, 400
+
+            # Update prices based on customer's current pricelist
+            for line in new_order.order_line:
+                product_product = request.env['product.product'].sudo().browse(line.product_id.id)
+                product_tmpl = request.env['product.template'].sudo().browse(product_product.product_tmpl_id.id)
+                
+                pricelist_price = price_list.get_product_price(product_tmpl, line.product_uom_qty, pricing_partner)
+                price = pricelist_price if pricelist_price > 0 else product_tmpl.external_basic_price
+
+                # Apply product discount if any
+                if product_tmpl.discount:
+                    price = price * (1 - (product_tmpl.discount / 100))
+                    price = round(price, 2)
+
+                if price:
+                    line.sudo().write({'price_unit': price})
+
+            # Confirm the new order
+            new_order.sudo().action_confirm()
+
+            # Handle reward points (always go to the customer, not the agent)
+            reward_points_records = request.env['rewards.points'].sudo().search([('order_id', '=', order_id)])
+            order_reward_points = sum(reward_points_records.mapped('points')) if reward_points_records else 0
+            
+            if order_reward_points:
+                request.env['rewards.points'].sudo().create({
+                    'points': order_reward_points,
+                    'user_id': original_customer_id,  # Always assign to customer
+                    'order_id': new_order.id,
+                    'status': 'gain' 
+                })
+
+                total_points_obj = request.env['rewards.totalpoints'].sudo().search([('user_id', '=', original_customer_id)])
+                if total_points_obj:
+                    total_points_obj.sudo().write({
+                        'total_points': total_points_obj.total_points + order_reward_points
+                    })
+
+            # Get shipping address
+            user_address = request.env['social_media.custom_address'].sudo().search([
+                ('id', '=', new_order.shipping_address_id)
+            ])
+
+            shipping_address = f'{user_address.address}, {user_address.continued_address}, {user_address.city}, {user_address.postal_code}, {user_address.village}, {user_address.state_id.name}, {user_address.country_id.name}' if user_address else None
+
+            # Create order details HTML for email
+            order_lines_html = ""
+            for line in new_order.order_line:
+                order_lines_html += f"""
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">{line.product_id.name}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">{int(line.product_uom_qty)}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">{line.price_unit:.2f} {new_order.currency_id.symbol}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">{line.price_total:.2f} {new_order.currency_id.symbol}</td>
+                    </tr>
+                """
+
+            # Email template with agent information if applicable
+            agent_info_html = ""
+            if is_agent_reorder:
+                agent_partner = request.env['res.partner'].sudo().browse(partner_id)
+                agent_info_html = f"""
+                    <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                        <h3 style="color: #1976d2; margin-bottom: 10px;">Ordine Agente</h3>
+                        <p style="margin: 0;"><strong>Agente:</strong> {agent_partner.name}</p>
+                        <p style="margin: 0;"><strong>Email Agente:</strong> {agent_partner.email}</p>
+                        <p style="margin: 0;"><strong>Cliente:</strong> {new_order.partner_id.name}</p>
+                    </div>
+                """
+
+            email_template = f'''
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
+                        <h2 style="color: #2C3E50; margin-bottom: 20px;">Conferma Riordine</h2>
+                        
+                        <p>Gentile {new_order.partner_id.name},</p>
+                        <p>{'Un agente ha effettuato' if is_agent_reorder else 'Hai effettuato'} un riordine per te. Di seguito i dettagli del tuo ordine:</p>
+                    </div>
+
+                    {agent_info_html}
+
+                    <div style="background-color: #ffffff; padding: 20px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #e9ecef;">
+                        <h3 style="color: #2C3E50; margin-bottom: 15px;">Dettagli Ordine</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+                            <tr>
+                                <td style="padding: 5px;"><strong>Numero Ordine:</strong></td>
+                                <td>{new_order.name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px;"><strong>Ordine Originale:</strong></td>
+                                <td>{order.name}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px;"><strong>Data Ordine:</strong></td>
+                                <td>{new_order.date_order.strftime('%Y-%m-%d %H:%M')}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 5px;"><strong>Punti Premio:</strong></td>
+                                <td>{order_reward_points}</td>
+                            </tr>
+                        </table>
+
+                        <h3 style="color: #2C3E50; margin: 20px 0 15px;">Prodotti Ordinati</h3>
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                            <thead>
+                                <tr style="background-color: #f8f9fa;">
+                                    <th style="padding: 8px; text-align: left;">Prodotto</th>
+                                    <th style="padding: 8px; text-align: center;">Quantità</th>
+                                    <th style="padding: 8px; text-align: right;">Prezzo Unit.</th>
+                                    <th style="padding: 8px; text-align: right;">Totale</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {order_lines_html}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" style="padding: 8px; text-align: right;"><strong>Totale Ordine:</strong></td>
+                                    <td style="padding: 8px; text-align: right;"><strong>{new_order.amount_total:.2f} {new_order.currency_id.symbol}</strong></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                            <h3 style="color: #2C3E50; margin-bottom: 10px;">Indirizzo di Spedizione</h3>
+                            <p style="margin: 0;">
+                                {user_address.address or ''}, {user_address.continued_address or ''}<br>
+                                {user_address.city or ''}, {user_address.postal_code or ''}<br>
+                                {user_address.village or ''}, {user_address.state_id.name or ''}<br>
+                                {user_address.country_id.name or ''}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="color: #666; font-size: 12px; margin-top: 20px; padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
+                        <p>Per qualsiasi domanda o assistenza, non esitare a contattare il nostro servizio clienti.</p>
+                        <p>Grazie per aver scelto i nostri prodotti!</p>
+                    </div>
+                </div>
+            '''
+
+            # Send email
+            template = request.env['mail.template'].sudo().create({
+                'name': 'Conferma Riordine',
+                'email_from': 'admin@primapaint.com',
+                'email_to': f"{new_order.partner_id.email}, staff@primapaint.it",
+                'subject': f'Riordine #{new_order.name} Confermato',
+                'body_html': email_template,
+                'model_id': request.env['ir.model']._get('sale.order').id,
+                'auto_delete': True
+            })
+            template.send_mail(new_order.id, force_send=True)
+            
+            # Handle notifications - Send to both customer and agent if applicable
+            if is_agent_reorder:
+                # Send notification to CUSTOMER
+                customer_filter = request.env['notification.status'].sudo().search([('partner_id', '=', original_customer_id)], limit=1)
+                if customer_filter.order:
+                    customer_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', original_customer_id)], limit=1)
+                    if customer_notification.onesignal_player_id:
+                        agent_partner = request.env['res.partner'].sudo().browse(partner_id)
+                        notification_service.send_onesignal_notification(
+                            customer_notification.onesignal_player_id,
+                            f'Il tuo ordine è stato riordinato da {agent_partner.name}',
+                            'Ordine Riordinato',
+                            {'type': 'agent_reorder', 'role': 'customer', 'agent_id': partner_id}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': f'Il tuo ordine è stato riordinato da {agent_partner.name}',
+                            'patner_id': original_customer_id,
+                            'title': 'Ordine Riordinato',
+                            'data': {'type': 'agent_reorder', 'role': 'customer', 'agent_id': partner_id},
+                            'include_player_ids': customer_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
+                
+                # Send notification to AGENT
+                agent_filter = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                if agent_filter.order:
+                    agent_notification = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    if agent_notification.onesignal_player_id:
+                        customer_name = request.env['res.partner'].sudo().browse(original_customer_id).name
+                        notification_service.send_onesignal_notification(
+                            agent_notification.onesignal_player_id,
+                            f'Riordine completato per {customer_name}',
+                            'Riordine Agente Completato',
+                            {'type': 'agent_reorder_completed', 'role': 'agent', 'customer_id': original_customer_id}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': f'Riordine completato per {customer_name}',
+                            'patner_id': partner_id,
+                            'title': 'Riordine Agente Completato',
+                            'data': {'type': 'agent_reorder_completed', 'role': 'agent', 'customer_id': original_customer_id},
+                            'include_player_ids': agent_notification.onesignal_player_id,
+                            'filter': 'order'
+                        })
             else:
-                # find the product id in pricelist items for price based on customer pricelist
-                
-                if quantity > 0:
-                    
-                    # new_line = env.sudo().create({
-                    #     'order_id': sale_order.id,
-                    #     'product_id': product.id,
-                    #     'product_uom_qty': quantity,
-                    #     'price_unit': product.list_price,
-                    # })
-                    
-                    # final_price = ProductPriceController.calculate_price_product(product.id, quantity, partner_id)
-                    final_price = test_product.external_basic_price
-                    if test_product.discount:
-                        final_price = final_price * (1 - (test_product.discount / 100))
-                        final_price = round(final_price, 2)
-                    
-                    
-                    new_line = env.sudo().create({
-                                            'order_id': sale_order.id,
-                                            'product_id': product.id,
-                                            'product_uom_qty': quantity,
-                                            'price_unit': final_price,
-                                        })
+                # Regular customer reorder notification
+                filter_notification = request.env['notification.status'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                if filter_notification.order:
+                    customer = request.env['customer.notification'].sudo().search([('partner_id', '=', partner_id)], limit=1)
+                    device_token = customer.onesignal_player_id       
+                    if device_token:
+                        notification_service.send_onesignal_notification(
+                            device_token,
+                            'Ordine riordinato con successo',
+                            'Ordine Riordinato',
+                            {'type': 'order_reorder'}
+                        )
+                        
+                        request.env['notification.storage'].sudo().create({
+                            'message': 'Ordine riordinato con successo',
+                            'patner_id': partner_id,
+                            'title': 'Ordine Riordinato',
+                            'data': {'type': 'order_reorder'},
+                            'include_player_ids': device_token,
+                            'filter': 'order'
+                        })
 
-                    return {
-                        'status': 'success',
-                        'message': 'Prodotto aggiunto al carrello con successo',
-                        'info': 'Product added to cart successfully',
-                        'quantity': quantity,
-                        'cart_line_id': new_line.id
-                    }
-                return {
-                    'status': 'error',
-                    'message': 'Nessuna quantità specificata',
-                    'info': 'No quantity specified'
-                }
-
-        except Exception as e:
             return {
-                'status': 'error',
-                'message': 'Errore del server interno',
-                'info': str(e)
-            }, 500
-
-
-
-    @http.route('/api/categories', auth='none', type='http', methods=['GET', 'OPTIONS'], csrf=False, cors='*')
-    def get_categories(self):
-        if request.httprequest.method == 'OPTIONS':
-            headers = {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, OPTIONS',
-                'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-                'Access-Control-Max-Age': '86400',
-            }
-            return Response(status=204, headers=headers)
-
-        try:
-            # Authenticate user
-            user_info = SocialMediaAuth.user_auth(self)
-            if user_info['status'] == 'error':
-                return Response(
-                    json.dumps({
-                        'status': 'error',
-                        'message': 'Autenticazione fallita',
-                        'info': user_info['message']
-                    }),
-                    content_type='application/json',
-                    status=401,
-                    headers={'Access-Control-Allow-Origin': '*'}
-                )
-
-            # Get categories with non-null external_id
-            # Using order to ensure consistent results when taking first record per external_id
-            categories = request.env['product.category'].sudo().search([
-                ('external_id', '!=', False)
-            ], order='external_id, id')
-
-            # Dictionary to keep track of unique external_ids
-            unique_categories = {}
-
-            for category in categories:
-                # Only keep the first occurrence of each external_id
-                if category.external_id not in unique_categories:
-                    # Get complete name and remove "All / Saleable / " prefix if it exists
-                    modified_complete_name = category.complete_name
-                    if modified_complete_name.startswith("All / Saleable / "):
-                        modified_complete_name = modified_complete_name[16:]  # Skip the "All / Saleable / " part
-                    
-                    unique_categories[category.external_id] = {
-                        'id': category.id,
-                        'name': category.name,
-                        'external_id': category.external_id,
-                        'complete_name': modified_complete_name  # Store the modified name directly in complete_name
-                    }
-
-            # Convert dictionary values to list
-            category_list = list(unique_categories.values())
-            
-            # loop over the category list and hide the All/Sealable/ part from complete name show the other part
-            
-
-            response_data = {
                 'status': 'success',
-                'message': 'Categorie uniche recuperate con successo',
-                'categories': category_list,
-                'count': len(category_list)
+                'message': 'Ordine riordinato con successo.',
+                'info': 'Order successfully reordered.',
+                'order_id': new_order.id,
+                'order_state': new_order.state, 
+                'order_amount_total': new_order.amount_total,
+                'order_date_order': new_order.date_order.strftime('%Y-%m-%d %H:%M:%S') if new_order.date_order else None,
+                'order_reward_points': order_reward_points,
+                'partner_address': shipping_address,
+                'is_agent_reorder': is_agent_reorder,
+                'original_customer_id': original_customer_id,
+                'agent_id': partner_id if is_agent_reorder else None
             }
-
-            return Response(
-                json.dumps(response_data),
-                content_type='application/json',
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
 
         except Exception as e:
-            return Response(
-                json.dumps({
-                    'status': 'error',
-                    'message': 'Errore del server interno',
-                    'info': str(e)
-                }),
-                content_type='application/json',
-                status=500,
-                headers={'Access-Control-Allow-Origin': '*'}
-            )
-                
+            return {'status': 'error', 'message': 'Si è verificato un errore durante il riordino.',
+                    'info': str(e)}, 500
